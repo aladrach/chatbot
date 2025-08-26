@@ -8,15 +8,6 @@ import remarkBreaks from "remark-breaks";
 import PerfectScrollbar from "react-perfect-scrollbar";
 import "react-perfect-scrollbar/dist/css/styles.css";
 
-const DEFAULT_SUGGESTED_QUESTIONS: string[] = [
-  "What is Incorta and how does it work?",
-  "How do I set up a schema in Incorta?",
-  "What are best practices for data modeling?",
-  "How do I configure incremental loads?",
-  "How do I troubleshoot query performance?",
-  "How do I secure access and manage roles?",
-];
-
 // Typing animation component
 function TypingText({ text, isActive, speed = 5 }: { text: string; isActive: boolean; speed?: number }) {
   const [displayedText, setDisplayedText] = useState("");
@@ -91,6 +82,7 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const scrollbarRef = useRef<any>(null);
+  const [recommendedQuestions, setRecommendedQuestions] = useState<string[]>([]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -162,8 +154,33 @@ export default function Home() {
     };
   }
 
-  async function sendMessage(overrideText?: string) {
-    const text = (overrideText ?? input).trim();
+  // Fetch recommended questions on load by asking "What is Incorta?"
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: "What is Incorta?" }),
+        });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => null);
+        if (!json) return;
+        const parsed = parseApiPayload(json?.data ?? json);
+        const rqs = parsed.relatedQuestions || [];
+        if (!cancelled && rqs.length) {
+          setRecommendedQuestions(rqs);
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function sendMessage() {
+    const text = input.trim();
     if (!text || isLoading) return;
     setIsLoading(true);
     setMessages((prev) => [...prev, { role: "user", content: text }]);
@@ -369,11 +386,6 @@ export default function Home() {
     }
   }
 
-  function onSuggestionClick(q: string) {
-    // Immediately send using override to avoid state race
-    sendMessage(q);
-  }
-
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -416,16 +428,17 @@ export default function Home() {
                 <p className="text-xs text-muted-foreground/70 text-center mt-2">
                   I can help you find information, explain concepts, and answer questions about Incorta.
                 </p>
-                {input.trim().length === 0 && (
-                  <div className="w-full max-w-xl mt-6">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 text-center">Try one of these</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {DEFAULT_SUGGESTED_QUESTIONS.map((q) => (
+                {recommendedQuestions.length > 0 && (
+                  <div className="mt-5 w-full max-w-xl">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 text-center">Recommended questions</div>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {recommendedQuestions.map((q, idx) => (
                         <button
-                          key={q}
+                          key={`${idx}-${q}`}
                           type="button"
-                          className="text-sm underline hover:no-underline px-3 py-2 rounded-md related-question-btn text-left cursor-pointer"
-                          onClick={() => onSuggestionClick(q)}
+                          className="text-xs underline hover:no-underline px-2 py-1 rounded-md related-question-btn text-left"
+                          onClick={() => setInput(q)}
+                          aria-label={`Use recommended question: ${q}`}
                         >
                           {q}
                         </button>
@@ -526,7 +539,7 @@ export default function Home() {
               disabled={isLoading}
               className="flex-1"
             />
-            <Button type="button" onClick={() => sendMessage()} disabled={isLoading || !input.trim()} className="flex-shrink-0">
+            <Button type="button" onClick={sendMessage} disabled={isLoading || !input.trim()} className="flex-shrink-0">
               {isLoading ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="inline-block size-4 rounded-full border-2 border-current border-t-transparent animate-spin" />

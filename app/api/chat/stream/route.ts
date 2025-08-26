@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
 import { GoogleAuth } from "google-auth-library";
+import { getCached, setCached } from "@/lib/server-cache";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const preferredRegion = ["iad1"]; // reduce egress latency towards Google
+export const maxDuration = 60;
 
 async function getAccessTokenFromServiceAccount(): Promise<string> {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
@@ -37,6 +41,21 @@ export async function POST(request: NextRequest) {
       return new Response(JSON.stringify({ error: "Missing 'query' in request body" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const key = queryText.trim().toLowerCase();
+    const cached = getCached<string>("chat-stream", key);
+    if (cached) {
+      // Serve cached as a single NDJSON message for simplicity
+      const ndjson = cached.endsWith("\n") ? cached : cached + "\n";
+      return new Response(ndjson, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-store, no-transform",
+          "X-Cache": "HIT",
+        },
       });
     }
 
@@ -79,13 +98,41 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Pass-through NDJSON/JSON streaming body directly
-    return new Response(upstream.body, {
+    // Tee the stream: forward to client while accumulating for cache
+    const { readable, writable } = new TransformStream();
+    const reader = upstream.body.getReader();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+    let collected = "";
+
+    (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            const chunkText = new TextDecoder().decode(value);
+            collected += chunkText;
+            await writer.write(value);
+          }
+        }
+      } finally {
+        try { writer.close(); } catch {}
+        // Persist a condensed cache: keep only the last full JSON object if present, otherwise store the NDJSON as-is
+        try {
+          // Best-effort: store entire NDJSON; UI regex handles deltas
+          setCached("chat-stream", key, collected, 600);
+        } catch {}
+      }
+    })();
+
+    return new Response(readable, {
       status: 200,
       headers: {
         "Content-Type": "application/x-ndjson; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
+        "Cache-Control": "no-store, no-transform",
         Connection: "keep-alive",
+        "X-Cache": "MISS",
       },
     });
   } catch (error) {

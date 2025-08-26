@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleAuth } from "google-auth-library";
+import { getCached, setCached } from "@/lib/server-cache";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const preferredRegion = ["iad1"]; // closer to Google US endpoints
+export const maxDuration = 60;
 
 type DiscoveryEngineResponse = unknown;
 
@@ -25,7 +29,6 @@ async function getAccessTokenFromServiceAccount(): Promise<string> {
   const client = await auth.getClient();
   const tokenResponse = await client.getAccessToken();
   const token = tokenResponse.token;
-  console.log("token", token);
   if (!token || typeof token !== "string") {
     throw new Error("Failed to obtain access token");
   }
@@ -39,10 +42,22 @@ export async function POST(request: NextRequest) {
     if (!queryText) {
       return NextResponse.json({ error: "Missing 'query' in request body" }, { status: 400 });
     }
-    console.log("queryText", queryText);
 
+    // Cache by normalized query
+    const key = queryText.trim().toLowerCase();
+    const cached = getCached<DiscoveryEngineResponse>("chat-answer", key);
+    if (cached) {
+      return NextResponse.json(
+        { data: cached },
+        {
+          headers: {
+            "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+            "X-Cache": "HIT",
+          },
+        }
+      );
+    }
     const accessToken = await getAccessTokenFromServiceAccount();
-    console.log("accessToken", accessToken);
     const url = "https://discoveryengine.googleapis.com/v1alpha/projects/659680475186/locations/global/collections/default_collection/engines/incorta-docs-searcher_1753768303750/servingConfigs/default_search:answer";
 
     const payload = {
@@ -78,8 +93,18 @@ export async function POST(request: NextRequest) {
     }
 
     const data = (await apiResponse.json()) as DiscoveryEngineResponse;
-    console.log(data);
-    return NextResponse.json({ data });
+    // Store in memory TTL cache
+    setCached("chat-answer", key, data, 600);
+    return NextResponse.json(
+      { data },
+      {
+        headers: {
+          // client should not cache; edge can cache response body in memory map via our server cache only
+          "Cache-Control": "no-store, no-transform",
+          "X-Cache": "MISS",
+        },
+      }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

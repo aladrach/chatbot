@@ -1,7 +1,7 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useLayoutEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -30,14 +30,139 @@ export default function ChatClient() {
   const [isStreaming, setIsStreaming] = useState(false);
   const scrollbarRef = useRef<any>(null);
   const [recommendedQuestions, setRecommendedQuestions] = useState<string[]>([]);
+  const lastSentUserIdRef = useRef<number | null>(null);
+  const lastSentUserElementRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollToUserRef = useRef(false);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const followModeRef = useRef<"bottom" | "topAnchor">("bottom");
+  const chatWrapperRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    // Update PerfectScrollbar when messages change
-    if (scrollbarRef.current) {
-      setTimeout(() => {
-        scrollbarRef.current.updateScroll();
-      }, 100);
+  function resolveScrollContainer(): HTMLElement | null {
+    // If we already resolved a working scroll container and it's still in the DOM, reuse it
+    if (scrollContainerRef.current && document.contains(scrollContainerRef.current)) {
+      return scrollContainerRef.current;
+    }
+
+    const wrapper = chatWrapperRef.current;
+    const anyRef: any = scrollbarRef.current;
+
+    const candidates: (HTMLElement | null)[] = [
+      // 1) Explicit containerRef from PerfectScrollbar
+      scrollContainerRef.current,
+      // 2) The known active PS container classes
+      wrapper ? (wrapper.querySelector('.scrollbar-container.ps.ps--active-y') as HTMLElement | null) : null,
+      // 3) Generic PS container
+      wrapper ? (wrapper.querySelector('.ps') as HTMLElement | null) : null,
+      // 4) The messages list itself if it happens to be scrollable
+      wrapper ? (wrapper.querySelector('ul.flex.flex-col.gap-3') as HTMLElement | null) : null,
+      // 5) Internal refs from the PS component
+      (anyRef && (anyRef._container || anyRef.container)) as HTMLElement | null,
+      // 6) As a last resort, the wrapper
+      wrapper as HTMLElement | null,
+    ];
+
+    // Prefer the first actually scrollable candidate
+    for (const el of candidates) {
+      if (!el) continue;
+      const isScrollable = (el.scrollHeight || 0) > (el.clientHeight || 0) + 1;
+      if (isScrollable) {
+        scrollContainerRef.current = el;
+        return el;
+      }
+    }
+
+    // Otherwise, pick the first non-null
+    for (const el of candidates) {
+      if (el) {
+        scrollContainerRef.current = el;
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function computeOffsetTop(parent: HTMLElement, el: HTMLElement): number {
+    let offset = 0;
+    let node: HTMLElement | null = el;
+    while (node && node !== parent) {
+      offset += node.offsetTop;
+      node = node.offsetParent as HTMLElement | null;
+    }
+    return offset;
+  }
+
+  useLayoutEffect(() => {
+    if (pendingScrollToUserRef.current && lastSentUserElementRef.current) {
+      // Scroll the PerfectScrollbar container so the just-sent user message aligns to top
+      const getScrollContainer = (): HTMLElement | null => {
+        return resolveScrollContainer();
+      };
+
+      const container = getScrollContainer();
+      const target = lastSentUserElementRef.current as HTMLElement;
+      try {
+        if (container) {
+          const computeOffsetTop = (parent: HTMLElement, el: HTMLElement): number => {
+            let offset = 0;
+            let node: HTMLElement | null = el;
+            while (node && node !== parent) {
+              offset += node.offsetTop;
+              node = node.offsetParent as HTMLElement | null;
+            }
+            return offset;
+          };
+          const doScroll = () => {
+            const padTop = parseFloat(getComputedStyle(container).paddingTop || "0") || 0;
+            const topRaw = computeOffsetTop(container, target);
+            const top = Math.max(0, topRaw - padTop);
+            // Immediate position first to guarantee movement, then smooth-correct slightly after
+            container.scrollTop = top;
+            setTimeout(() => {
+              container.scrollTo({ top, behavior: "smooth" });
+            }, 20);
+          };
+          // Ensure PS has updated sizes before scroll
+          try { scrollbarRef.current?.updateScroll?.(); } catch {}
+          requestAnimationFrame(() => {
+            doScroll();
+            setTimeout(() => { try { scrollbarRef.current?.updateScroll?.(); } catch {} }, 60);
+          });
+        } else {
+          // best-effort fallback
+          target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+        }
+      } catch {}
+      pendingScrollToUserRef.current = false;
+      return;
+    }
+
+    // While in topAnchor mode, continuously keep the just-sent user bubble at the top
+    if (followModeRef.current === "topAnchor" && lastSentUserElementRef.current) {
+      const container = resolveScrollContainer();
+      const target = lastSentUserElementRef.current as HTMLElement;
+      if (container) {
+        const padTop = parseFloat(getComputedStyle(container).paddingTop || "0") || 0;
+        const topRaw = computeOffsetTop(container, target);
+        const top = Math.max(0, topRaw - padTop);
+        // Set directly to avoid jitter during frequent updates
+        container.scrollTop = top;
+        try { scrollbarRef.current?.updateScroll?.(); } catch {}
+      }
+      return;
+    }
+
+    // Default behavior only when in bottom follow mode
+    if (followModeRef.current === "bottom") {
+      const container = resolveScrollContainer();
+      if (container) {
+        try { scrollbarRef.current?.updateScroll?.(); } catch {}
+        requestAnimationFrame(() => {
+          container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+          setTimeout(() => { try { scrollbarRef.current?.updateScroll?.(); } catch {} }, 60);
+        });
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
     }
   }, [messages]);
 
@@ -101,7 +226,11 @@ export default function ChatClient() {
     const text = (textOverride ?? input).trim();
     if (!text || isLoading) return;
     setIsLoading(true);
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    const id = Date.now();
+    lastSentUserIdRef.current = id;
+    pendingScrollToUserRef.current = true;
+    followModeRef.current = "topAnchor";
+    setMessages((prev) => [...prev, { role: "user", content: text, id } as any]);
     setInput("");
     try {
       const res = await fetch("/api/chat/stream", {
@@ -230,6 +359,8 @@ export default function ChatClient() {
         } catch {}
 
         setIsStreaming(false);
+        // Restore bottom follow after streaming completes
+        followModeRef.current = "bottom";
         const finalSources = Array.from(sourcesMap.values());
         setMessages((prev) => {
           const next = [...prev];
@@ -283,7 +414,7 @@ export default function ChatClient() {
       <main className="flex flex-col gap-3 sm:gap-4 items-center sm:items-start w-full max-w-4xl mx-auto flex-1 min-h-0 relative z-10">
         <div className="w-full flex flex-col gap-4 flex-1 min-h-0">
           <div className="w-full flex-1 rounded-lg chat-container min-h-0">
-            <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+            <div ref={chatWrapperRef} style={{ height: '100%', width: '100%', position: 'relative' }}>
               <PerfectScrollbar 
                 ref={scrollbarRef}
                 key="chat-scrollbar"
@@ -293,6 +424,7 @@ export default function ChatClient() {
                   wheelPropagation: true,
                   minScrollbarLength: 20,
                 }}
+                containerRef={(ref: HTMLElement | null) => { scrollContainerRef.current = ref; }}
                 style={{ 
                   height: '100%', 
                   width: '100%',
@@ -338,15 +470,18 @@ export default function ChatClient() {
                   const isAssistant = m.role === "assistant";
                   const isStreaming = isAssistant && (m as any).streaming;
                   const messageText = isAssistant ? ((m as any).answerText ?? m.content) : m.content;
+                  const isJustSentUser = !isAssistant && (m as any).id && (m as any).id === lastSentUserIdRef.current;
+                  const key = (m as any).id ?? `${m.role}-${i}`;
                   
                   return (
-                    <li key={i} className={`${isAssistant ? "flex justify-start" : "flex justify-end"} fade-in`}>
+                    <li key={key} className={`${isAssistant ? "flex justify-start" : "flex justify-end"} fade-in`}>
                       <div
                         className={
                           isAssistant
                             ? "max-w-[85%] rounded-2xl px-4 py-2 text-sm message-bubble-assistant"
                             : "max-w-[85%] rounded-2xl px-4 py-2 text-sm message-bubble-user"
                         }
+                        ref={isJustSentUser ? lastSentUserElementRef : undefined}
                       >
                         {isAssistant ? (
                           <div className="prose prose-sm dark:prose-invert max-w-none fade-in">

@@ -81,10 +81,27 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const scrollbarRef = useRef<any>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Update PerfectScrollbar when messages change
+    if (scrollbarRef.current) {
+      setTimeout(() => {
+        scrollbarRef.current.updateScroll();
+      }, 100);
+    }
   }, [messages]);
+
+  // Force PerfectScrollbar initialization on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (scrollbarRef.current) {
+        scrollbarRef.current.updateScroll();
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Extract delta text from arbitrary streaming JSON shapes (AnswerTextDelta, answerText, text, etc)
   function extractDeltaText(input: any): string {
@@ -351,24 +368,27 @@ export default function Home() {
   }
 
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 relative">
-      {/* Subtle background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--primary)_0%,_transparent_50%)] opacity-5 pointer-events-none" />
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start w-full max-w-2xl relative z-10">
-        <div className="w-full flex flex-col gap-4">
-          <div className="w-full min-h-[240px] max-h-[800px] rounded-lg chat-container">
-            <PerfectScrollbar 
-              options={{
-                wheelPropagation: false,
-                suppressScrollX: true,
-              }}
-              style={{ 
-                maxHeight: '800px', 
-                minHeight: '240px',
-                padding: '1rem'
-              }}
-            >
+    <div className="font-sans flex flex-col h-full w-full p-2 sm:p-4 relative embedded-chatbot">
+      <main className="flex flex-col gap-3 sm:gap-4 items-center sm:items-start w-full max-w-4xl mx-auto flex-1 min-h-0 relative z-10">
+        <div className="w-full flex flex-col gap-4 flex-1 min-h-0">
+          <div className="w-full flex-1 rounded-lg chat-container min-h-0">
+            <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+              <PerfectScrollbar 
+                ref={scrollbarRef}
+                key="chat-scrollbar"
+                options={{
+                  suppressScrollX: true,
+                  wheelSpeed: 1,
+                  wheelPropagation: true,
+                  minScrollbarLength: 20,
+                }}
+                style={{ 
+                  height: '100%', 
+                  width: '100%',
+                  padding: '1rem',
+                  boxSizing: 'border-box'
+                }}
+              >
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full py-12 fade-in">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
@@ -464,20 +484,22 @@ export default function Home() {
               </div>
             )}
             </PerfectScrollbar>
+            </div>
           </div>
-          <div className="flex w-full items-center gap-2 slide-up">
+          <div className="flex w-full items-center gap-2 slide-up flex-shrink-0">
             <Input
               placeholder="Type your question and press Enter"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isLoading}
+              className="flex-1"
             />
-            <Button type="button" onClick={sendMessage} disabled={isLoading || !input.trim()}>
+            <Button type="button" onClick={sendMessage} disabled={isLoading || !input.trim()} className="flex-shrink-0">
               {isLoading ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="inline-block size-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                  Sending
+                  <span className="hidden sm:inline">Sending</span>
                 </span>
               ) : (
                 "Send"

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embedded Chatbot Example</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            height: 80vh;
+        }
+        
+        .content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .chatbot-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .chatbot-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr 400px;
+            }
+        }
+        
+        /* Small embedded version */
+        .small-chatbot {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 350px;
+            height: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            z-index: 1000;
+            display: none;
+        }
+        
+        .chat-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background: #2563eb;
+            border-radius: 50%;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 1001;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        }
+        
+        .chat-toggle:hover {
+            background: #1d4ed8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="content">
+            <h1>Your Website Content</h1>
+            <p>This is an example of how the Incorta Chatbot can be embedded into your website. The chatbot is fully responsive and will adapt to different container sizes.</p>
+            
+            <h2>Embedding Options</h2>
+            <ul>
+                <li><strong>Sidebar Integration:</strong> As shown on the right, perfect for documentation sites or help centers</li>
+                <li><strong>Modal/Popup:</strong> Click the blue button in the bottom right to see a floating chat window</li>
+                <li><strong>Full Page:</strong> Can be embedded as a full-page experience</li>
+                <li><strong>Inline:</strong> Embedded within page content at any size</li>
+            </ul>
+            
+            <h2>Features</h2>
+            <ul>
+                <li>Fully responsive design that adapts to container size</li>
+                <li>Dark mode support</li>
+                <li>Streaming responses with typing animation</li>
+                <li>Source citations and related questions</li>
+                <li>Mobile-optimized interface</li>
+                <li>No fixed viewport dependencies - works in any container</li>
+            </ul>
+            
+            <h2>Implementation</h2>
+            <p>Simply embed the chatbot using an iframe or integrate it directly into your React/Next.js application:</p>
+            
+            <pre><code>&lt;iframe 
+    src="http://localhost:3000" 
+    width="100%" 
+    height="600px"
+    style="border: none; border-radius: 8px;"
+&gt;&lt;/iframe&gt;</code></pre>
+        </div>
+        
+        <div class="chatbot-container">
+            <iframe 
+                src="http://localhost:3000" 
+                class="chatbot-iframe"
+                title="Incorta Chatbot"
+            ></iframe>
+        </div>
+    </div>
+    
+    <!-- Floating chat button -->
+    <button class="chat-toggle" onclick="toggleChat()">💬</button>
+    
+    <!-- Small floating chatbot -->
+    <div class="small-chatbot" id="smallChat">
+        <iframe 
+            src="http://localhost:3000" 
+            class="chatbot-iframe"
+            title="Incorta Chatbot - Floating"
+        ></iframe>
+    </div>
+    
+    <script>
+        function toggleChat() {
+            const chatbot = document.getElementById('smallChat');
+            const button = document.querySelector('.chat-toggle');
+            
+            if (chatbot.style.display === 'none' || chatbot.style.display === '') {
+                chatbot.style.display = 'block';
+                button.innerHTML = '✕';
+            } else {
+                chatbot.style.display = 'none';
+                button.innerHTML = '💬';
+            }
+        }
+    </script>
+</body>
+</html>

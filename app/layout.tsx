@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Incora Chatbot",
-  description: "Chatbot for Incora",
+  title: "Incorta Chatbot",
+  description: "Chatbot for Incorta Docs",
 };
 
 export default function RootLayout({

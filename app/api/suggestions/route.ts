@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 export const runtime = "edge";
-export const revalidate = 60 * 60; // 1 hour ISR at edge
+export const revalidate = 300; // 1 hour ISR at edge
 
 // Lightweight suggestions to avoid cold start on chat endpoints
 const DEFAULT_SUGGESTIONS = [

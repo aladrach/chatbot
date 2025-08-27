@@ -222,6 +222,21 @@ export default function ChatClient() {
     };
   }, []);
 
+  // Pre-populate input from URL parameter
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const candidateKeys = ["q", "query", "prompt", "message"];
+      for (const key of candidateKeys) {
+        const value = params.get(key);
+        if (value && value.trim()) {
+          setInput(value);
+          break;
+        }
+      }
+    } catch {}
+  }, []);
+
   async function sendMessage(textOverride?: string) {
     const text = (textOverride ?? input).trim();
     if (!text || isLoading) return;

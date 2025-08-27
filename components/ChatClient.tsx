@@ -410,7 +410,7 @@ export default function ChatClient() {
   }
 
   return (
-    <div className="font-sans flex flex-col h-full w-full p-2 sm:p-4 relative embedded-chatbot">
+    <div className="font-sans flex flex-col h-full w-full p-2 sm:p-4 relative embedded-chatbot" style={{background: 'transparent'}}>
       <main className="flex flex-col gap-3 sm:gap-4 items-center sm:items-start w-full max-w-4xl mx-auto flex-1 min-h-0 relative z-10">
         <div className="w-full flex flex-col gap-4 flex-1 min-h-0">
           <div className="w-full flex-1 rounded-lg chat-container min-h-0">

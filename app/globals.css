@@ -117,7 +117,8 @@
     @apply border-border outline-ring/50;
   }
   html, body {
-    @apply bg-background text-foreground h-full;
+    @apply text-foreground h-full;
+    background: transparent !important;
   }
   #__next {
     height: 100%;
@@ -186,18 +187,8 @@
 /* Enhanced Visual Effects */
 @layer components {
   .chat-container {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--card) / 0.6) 0%,
-      hsl(var(--card) / 0.4) 50%,
-      hsl(var(--card) / 0.6) 100%
-    );
-    backdrop-filter: blur(12px);
-    border: 1px solid hsl(var(--border) / 0.8);
-    box-shadow: 
-      0 4px 6px -1px hsl(var(--foreground) / 0.1),
-      0 2px 4px -1px hsl(var(--foreground) / 0.06),
-      inset 0 1px 0 hsl(var(--background) / 0.1);
+    background: transparent;
+    /* Remove backdrop filter and borders for transparency */
     /* Ensure proper height behavior for embedding */
     min-height: 200px;
     /* Required for PerfectScrollbar */
@@ -221,89 +212,97 @@
   .message-bubble-user {
     background: linear-gradient(
       135deg,
-      rgba(59, 130, 246, 0.1) 0%,
-      rgba(37, 99, 235, 0.08) 100%
+      rgba(59, 130, 246, 0.15) 0%,
+      rgba(37, 99, 235, 0.12) 100%
     );
-    border: 1px solid rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.3);
     color: rgb(31, 41, 55);
     box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.05),
-      0 1px 2px rgba(0, 0, 0, 0.03);
+      0 1px 3px rgba(0, 0, 0, 0.08),
+      0 1px 2px rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(8px);
   }
   
   .message-bubble-assistant {
     background: linear-gradient(
       135deg,
-      rgba(243, 244, 246, 0.4) 0%,
-      rgba(249, 250, 251, 0.2) 100%
+      rgba(243, 244, 246, 0.6) 0%,
+      rgba(249, 250, 251, 0.4) 100%
     );
-    border: 1px solid rgba(209, 213, 219, 0.3);
+    border: 1px solid rgba(209, 213, 219, 0.4);
     color: rgb(31, 41, 55);
     box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.03),
-      0 1px 2px rgba(0, 0, 0, 0.02);
+      0 1px 3px rgba(0, 0, 0, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(8px);
   }
 
   /* Dark mode message bubbles */
   .dark .message-bubble-user {
     background: linear-gradient(
       135deg,
-      rgba(59, 130, 246, 0.15) 0%,
-      rgba(37, 99, 235, 0.12) 100%
+      rgba(59, 130, 246, 0.2) 0%,
+      rgba(37, 99, 235, 0.16) 100%
     );
-    border: 1px solid rgba(59, 130, 246, 0.25);
+    border: 1px solid rgba(59, 130, 246, 0.35);
     color: rgb(243, 244, 246);
+    backdrop-filter: blur(8px);
   }
   
   .dark .message-bubble-assistant {
     background: linear-gradient(
       135deg,
-      rgba(55, 65, 81, 0.3) 0%,
-      rgba(75, 85, 99, 0.2) 100%
+      rgba(55, 65, 81, 0.4) 0%,
+      rgba(75, 85, 99, 0.3) 100%
     );
-    border: 1px solid rgba(107, 114, 128, 0.3);
+    border: 1px solid rgba(107, 114, 128, 0.4);
     color: rgb(243, 244, 246);
+    backdrop-filter: blur(8px);
   }
   
   .source-link {
     background: linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.3) 0%,
-      rgba(249, 250, 251, 0.2) 100%
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(249, 250, 251, 0.4) 100%
     );
-    border: 1px solid rgba(209, 213, 219, 0.25);
+    border: 1px solid rgba(209, 213, 219, 0.4);
     color: rgb(31, 41, 55);
+    backdrop-filter: blur(4px);
   }
   
   .related-question-btn {
     background: linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.3) 0%,
-      rgba(249, 250, 251, 0.2) 100%
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(249, 250, 251, 0.4) 100%
     );
-    border: 1px solid rgba(209, 213, 219, 0.25);
+    border: 1px solid rgba(209, 213, 219, 0.4);
     color: rgb(31, 41, 55);
+    backdrop-filter: blur(4px);
   }
 
   /* Dark mode source links and buttons */
   .dark .source-link {
     background: linear-gradient(
       135deg,
-      rgba(55, 65, 81, 0.3) 0%,
-      rgba(75, 85, 99, 0.2) 100%
+      rgba(55, 65, 81, 0.5) 0%,
+      rgba(75, 85, 99, 0.4) 100%
     );
-    border: 1px solid rgba(107, 114, 128, 0.25);
+    border: 1px solid rgba(107, 114, 128, 0.4);
     color: rgb(243, 244, 246);
+    backdrop-filter: blur(4px);
   }
   
   .dark .related-question-btn {
     background: linear-gradient(
       135deg,
-      rgba(55, 65, 81, 0.3) 0%,
-      rgba(75, 85, 99, 0.2) 100%
+      rgba(55, 65, 81, 0.5) 0%,
+      rgba(75, 85, 99, 0.4) 100%
     );
-    border: 1px solid rgba(107, 114, 128, 0.25);
+    border: 1px solid rgba(107, 114, 128, 0.4);
     color: rgb(243, 244, 246);
+    backdrop-filter: blur(4px);
   }
   
   .typing-indicator {

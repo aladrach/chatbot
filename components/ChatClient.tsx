@@ -34,7 +34,9 @@ export default function ChatClient() {
   const lastSentUserElementRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollToUserRef = useRef(false);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
-  const followModeRef = useRef<"bottom" | "topAnchor">("bottom");
+  const followModeRef = useRef<"bottom" | "topAnchor" | "manual">("bottom");
+  const listenersAttachedRef = useRef(false);
+  const manualLockRef = useRef(false);
   const chatWrapperRef = useRef<HTMLDivElement | null>(null);
 
   function resolveScrollContainer(): HTMLElement | null {
@@ -90,6 +92,28 @@ export default function ChatClient() {
     }
     return offset;
   }
+
+  // Attach user-interaction listeners to stop auto-scrolling when the user scrolls or drags
+  useEffect(() => {
+    if (listenersAttachedRef.current) return;
+    const container = resolveScrollContainer();
+    if (!container) return;
+    const stopAuto = () => {
+      manualLockRef.current = true;
+      followModeRef.current = "manual";
+      pendingScrollToUserRef.current = false;
+    };
+    container.addEventListener("wheel", stopAuto, { passive: true });
+    container.addEventListener("pointerdown", stopAuto, { passive: true });
+    container.addEventListener("touchstart", stopAuto, { passive: true });
+    listenersAttachedRef.current = true;
+    return () => {
+      try { container.removeEventListener("wheel", stopAuto as any); } catch {}
+      try { container.removeEventListener("pointerdown", stopAuto as any); } catch {}
+      try { container.removeEventListener("touchstart", stopAuto as any); } catch {}
+      listenersAttachedRef.current = false;
+    };
+  }, [messages.length]);
 
   useLayoutEffect(() => {
     if (pendingScrollToUserRef.current && lastSentUserElementRef.current) {
@@ -244,6 +268,7 @@ export default function ChatClient() {
     const id = Date.now();
     lastSentUserIdRef.current = id;
     pendingScrollToUserRef.current = true;
+    manualLockRef.current = false;
     followModeRef.current = "topAnchor";
     setMessages((prev) => [...prev, { role: "user", content: text, id } as any]);
     setInput("");
@@ -374,8 +399,10 @@ export default function ChatClient() {
         } catch {}
 
         setIsStreaming(false);
-        // Restore bottom follow after streaming completes
-        followModeRef.current = "bottom";
+        // Restore bottom follow after streaming completes unless user intervened
+        if (!manualLockRef.current) {
+          followModeRef.current = "bottom";
+        }
         const finalSources = Array.from(sourcesMap.values());
         setMessages((prev) => {
           const next = [...prev];

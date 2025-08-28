@@ -1,37 +1,10 @@
 import { NextRequest } from "next/server";
-import { GoogleAuth } from "google-auth-library";
 import { getCached, setCached } from "@/lib/server-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const preferredRegion = ["iad1"]; // reduce egress latency towards Google
+export const preferredRegion = ["iad1"]; // reduce egress latency towards Vertex AI backend
 export const maxDuration = 60;
-
-async function getAccessTokenFromServiceAccount(): Promise<string> {
-  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKeyRaw = process.env.GOOGLE_PRIVATE_KEY;
-  if (!clientEmail || !privateKeyRaw) {
-    throw new Error("Missing GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY env vars");
-  }
-
-  const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
-
-  const auth = new GoogleAuth({
-    credentials: {
-      client_email: clientEmail,
-      private_key: privateKey,
-    },
-    scopes: ["https://www.googleapis.com/auth/cloud-platform"],
-  });
-
-  const client = await auth.getClient();
-  const tokenResponse = await client.getAccessToken();
-  const token = tokenResponse.token;
-  if (!token || typeof token !== "string") {
-    throw new Error("Failed to obtain access token");
-  }
-  return token;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,30 +32,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const accessToken = await getAccessTokenFromServiceAccount();
-
-    // Stream Answer endpoint per Google Discovery Engine App Builder docs
-    // https://cloud.google.com/generative-ai-app-builder/docs/stream-answer
-    const url = "https://discoveryengine.googleapis.com/v1alpha/projects/659680475186/locations/global/collections/default_collection/engines/incorta-docs-searcher_1753768303750/servingConfigs/default_search:streamAnswer";
+    // New Vertex AI backend endpoint
+    const url = "https://vertex-ai-backend-659680475186.us-central1.run.app/api/search";
 
     const payload = {
-      query: { text: queryText, queryId: "" },
-      session: "",
-      relatedQuestionsSpec: { enable: true },
-      answerGenerationSpec: {
-        ignoreAdversarialQuery: true,
-        ignoreNonAnswerSeekingQuery: false,
-        ignoreLowRelevantContent: true,
-        multimodalSpec: {},
-        includeCitations: true,
-        modelSpec: { modelVersion: "stable" },
-      },
+      query: queryText,
     };
 
     const upstream = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
         // Prefer NDJSON style streaming; upstream will send chunked JSON responses
         Accept: "application/x-ndjson, application/json",

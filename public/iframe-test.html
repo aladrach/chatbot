@@ -71,9 +71,13 @@
             margin-top: 10px;
             font-size: 0.9em;
         }
+        
+        .scroll-content {
+            height: 200vh; /* Make page tall enough to scroll */
+        }
     </style>
 </head>
-<body>
+<body class="scroll-content">
     <div class="container">
         <div class="header">
             <h1>Chatbot iFrame Embedding Test</h1>
@@ -128,6 +132,7 @@
                     <li><strong>Verify transparency:</strong> The chatbot background should be transparent, showing the gradient behind it</li>
                     <li><strong>Test functionality:</strong> Try sending messages to ensure the chatbot works normally when embedded</li>
                     <li><strong>Check responsiveness:</strong> Resize the browser window to test responsive behavior</li>
+                    <li><strong>Test iframe scrolling:</strong> Scroll to the bottom of a chat iframe and continue scrolling - the parent page should scroll</li>
                 </ol>
                 
                 <h3 style="margin-top: 20px;">Expected Results:</h3>
@@ -137,9 +142,28 @@
                     <li>✅ All functionality works normally when embedded</li>
                     <li>✅ Responsive design adapts to different iframe sizes</li>
                     <li>✅ No visual artifacts or rendering issues</li>
+                    <li>✅ Scrolling continues to parent page when iframe is at scroll boundaries</li>
                 </ul>
             </div>
         </div>
     </div>
+    
+    <script>
+        // Listen for scroll messages from iframes and handle them
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'iframe-scroll') {
+                const { deltaY, atBoundary } = event.data;
+                
+                // Scroll the parent window when the iframe is at a boundary
+                if (atBoundary === 'top' && deltaY < 0) {
+                    // Scrolling up at top boundary
+                    window.scrollBy(0, deltaY * 2);
+                } else if (atBoundary === 'bottom' && deltaY > 0) {
+                    // Scrolling down at bottom boundary  
+                    window.scrollBy(0, deltaY * 2);
+                }
+            }
+        }, false);
+    </script>
 </body>
 </html>

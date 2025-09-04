@@ -288,8 +288,8 @@ export default function ChatClient() {
       return { cleanedText: input, followUps: [] };
     }
 
-    // 1) Try to extract from HTML structure if present
-    const htmlSectionRegex = /(<p[^>]*>\s*Proposed\s+follow[-\s]*up\s+questions:\s*<\/p>\s*<ul[^>]*>)([\s\S]*?)(<\/ul>)/i;
+    // 1) Try to extract from HTML structure if present (support multiple heading variants)
+    const htmlSectionRegex = /(<(?:p|h[1-6])[^>]*>\s*(?:<strong>|<b>)?\s*(?:here\s+are\s+(?:some|the)\s+)?(?:(?:proposed|suggested|recommended)\s+)?(?:next\s+)?(?:follow(?:[-\s\u2011]?up)?\s+)?questions\s*:?(?:<\/strong>|<\/b>)?\s*<\/(?:p|h[1-6])>\s*<ul[^>]*>)([\s\S]*?)(<\/ul>)/i;
     const htmlMatch = input.match(htmlSectionRegex);
     if (htmlMatch) {
       const listHtml = htmlMatch[2] || "";
@@ -310,10 +310,15 @@ export default function ChatClient() {
 
     // 2) Markdown/plain text parsing
     const lines = input.split(/\r?\n/);
-    const headingRegex = /^\s*(?:#+\s*)?(?:\*\*[^*]*\*\*\s*)?Proposed\s+follow[-\s]*up\s+questions:\s*$/i;
+    const headingRegexes: RegExp[] = [
+      /^\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:here\s+are\s+(?:some|the)\s+)?(?:(?:proposed|suggested|recommended)\s+)?(?:next\s+)?follow(?:[-\s\u2011]?up)?\s+questions\s*:?(?:\s*\*\*)?\s*$/i,
+      /^\s*(?:#{1,6}\s*)?(?:\*\*)?\s*(?:here\s+are\s+(?:some|the)\s+)?(?:suggested|recommended|related|next)\s+questions\s*:?(?:\s*\*\*)?\s*$/i,
+      /^\s*(?:#{1,6}\s*)?(?:\*\*)?\s*here\s+are\s+(?:some|the)\s+follow(?:[-\s\u2011]?up)?\s+questions\s*:?(?:\s*\*\*)?\s*$/i,
+    ];
     let headerIndex = -1;
     for (let i = 0; i < lines.length; i++) {
-      if (headingRegex.test(lines[i])) {
+      const line = lines[i];
+      if (headingRegexes.some((re) => re.test(line))) {
         headerIndex = i;
         break;
       }
@@ -327,7 +332,7 @@ export default function ChatClient() {
     let idx = headerIndex + 1;
     if (idx < lines.length && /^\s*$/.test(lines[idx])) idx++;
 
-    const bulletRegex = /^\s*(?:[\-\*\u2022]|\d+\.)\s+(.*\S)\s*$/;
+    const bulletRegex = /^\s*(?:[\-\*\u2022\u2013\u2014]|\d+\.)\s+(.*\S)\s*$/;
     const followUps: string[] = [];
     let endIdx = idx;
     while (endIdx < lines.length) {
@@ -368,173 +373,33 @@ export default function ChatClient() {
         body: JSON.stringify({ query: text }),
       });
 
-      if (res.ok && res.body) {
-        setIsStreaming(true);
-        let accumulatedText = "";
-        let relatedQuestions: string[] | undefined;
-        const sourcesMap = new Map<string, { title?: string; uri: string }>();
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = ""; // rolling text buffer
-        let fullStream = ""; // accumulate for final parsing of references
-        const deltaRegex = /\"answerText(?:Delta)?\"\s*:\s*\"((?:\\.|[^"\\])*)\"/g;
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
-          fullStream += chunk;
-          let match;
-          let lastIndex = 0;
-          let hasNewDeltas = false;
-          while ((match = deltaRegex.exec(buffer)) !== null) {
-            const raw = match[1] ?? "";
-            try {
-              const text = JSON.parse(`"${raw}"`);
-              accumulatedText += text;
-              hasNewDeltas = true;
-            } catch {}
-            lastIndex = deltaRegex.lastIndex;
-          }
-
-          if (hasNewDeltas) {
-            const sources = Array.from(sourcesMap.values());
-            const extractionLive = extractProposedFollowUps(accumulatedText);
-            const liveAnswerText = extractionLive.cleanedText || accumulatedText;
-            const liveFollowUps = extractionLive.followUps;
-            if (extractionLive.followUps.length > 0) {
-              console.debug("stream: extracted follow-ups live", extractionLive.followUps);
-            }
-            setMessages((prev) => {
-              const next = [...prev];
-              let foundStreaming = false;
-              for (let i = next.length - 1; i >= 0; i--) {
-                const m = next[i];
-                if (m.role === "assistant" && (m as any).streaming) {
-                  next[i] = {
-                    role: "assistant" as const,
-                    content: liveAnswerText || "",
-                    answerText: liveAnswerText || undefined,
-                    sources: sources.length ? sources : undefined,
-                    relatedQuestions: (liveFollowUps && liveFollowUps.length > 0)
-                      ? liveFollowUps
-                      : relatedQuestions,
-                    raw: (m as any).raw,
-                    streaming: true,
-                  };
-                  foundStreaming = true;
-                  break;
-                }
-              }
-              if (!foundStreaming && accumulatedText.length > 0) {
-                const newMessage = {
-                  role: "assistant" as const,
-                  content: liveAnswerText,
-                  answerText: liveAnswerText,
-                  sources: sources.length ? sources : undefined,
-                  relatedQuestions: (liveFollowUps && liveFollowUps.length > 0)
-                    ? liveFollowUps
-                    : relatedQuestions,
-                  streaming: true,
-                };
-                next.push(newMessage);
-              }
-              return next;
-            });
-          }
-          if (lastIndex > 0) {
-            buffer = buffer.slice(lastIndex);
-            deltaRegex.lastIndex = 0;
-          } else if (buffer.length > 10000) {
-            buffer = buffer.slice(-10000);
-          }
-        }
-
-        buffer += decoder.decode();
-        try {
-          const chunks = fullStream.split(',\r\n{');
-          for (let chunk of chunks) {
-            if (!chunk.startsWith('{')) chunk = '{' + chunk;
-            try {
-              const obj = JSON.parse(chunk);
-              const refs = obj?.references || obj?.answer?.references;
-              if (Array.isArray(refs)) {
-                for (const ref of refs) {
-                  const uri: string | undefined = ref?.chunkInfo?.documentMetadata?.uri;
-                  const title: string | undefined = ref?.chunkInfo?.documentMetadata?.title;
-                  const key = uri || title || JSON.stringify(ref);
-                  if (key && uri && !sourcesMap.has(key)) {
-                    sourcesMap.set(key, { title, uri });
-                  }
-                }
-              }
-              const rqs = obj?.relatedQuestions || obj?.answer?.relatedQuestions;
-              if (Array.isArray(rqs) && rqs.length) {
-                relatedQuestions = rqs;
-              }
-            } catch (e) {
-              const cleaned = chunk.replace(/^,\s*/, '');
-              try {
-                const obj = JSON.parse(cleaned);
-                const refs = obj?.references || obj?.answer?.references;
-                const rqs = obj?.relatedQuestions || obj?.answer?.relatedQuestions;
-                if (Array.isArray(refs)) {
-                  for (const ref of refs) {
-                    const uri: string | undefined = ref?.chunkInfo?.documentMetadata?.uri;
-                    const title: string | undefined = ref?.chunkInfo?.documentMetadata?.title;
-                    const key = uri || title || JSON.stringify(ref);
-                    if (key && uri && !sourcesMap.has(key)) {
-                      sourcesMap.set(key, { title, uri });
-                    }
-                  }
-                }
-                if (Array.isArray(rqs) && rqs.length) {
-                  relatedQuestions = rqs;
-                }
-              } catch {}
-            }
-          }
-        } catch {}
-
-        setIsStreaming(false);
-        // Restore bottom follow after streaming completes unless user intervened
-        if (!manualLockRef.current) {
-          followModeRef.current = "bottom";
-        }
-        const finalSources = Array.from(sourcesMap.values());
-        const extraction = extractProposedFollowUps(accumulatedText);
-        const finalAnswerText = extraction.cleanedText;
-        const parsedFollowUps = extraction.followUps;
-        console.debug("stream: final extraction", { followUps: parsedFollowUps, finalAnswerLen: (finalAnswerText || "").length, streamedRelated: relatedQuestions });
-        setMessages((prev) => {
-          const next = [...prev];
-          for (let i = next.length - 1; i >= 0; i--) {
-            const m = next[i];
-            if (m.role === "assistant" && (m as any).streaming) {
-              next[i] = {
-                ...(m as any),
-                streaming: false,
-                sources: finalSources.length > 0 ? finalSources : undefined,
-                // Prefer parsed follow-ups; fallback to streamed relatedQuestions
-                relatedQuestions: (parsedFollowUps && parsedFollowUps.length > 0)
-                  ? parsedFollowUps
-                  : (relatedQuestions || undefined),
-                // Also strip the follow-ups section from displayed content
-                content: finalAnswerText || (m as any).content,
-                answerText: finalAnswerText || (m as any).answerText,
-              } as any;
-              return next;
-            }
-          }
-          if (accumulatedText.length === 0) {
-            next.push({ role: "assistant", content: "(No streamed content received)" } as any);
-          }
-          return next;
-        });
-      } else {
+      if (!res.ok) {
         const textBody = await res.text().catch(() => "");
-        setMessages((prev) => [...prev, { role: "assistant", content: `Streaming failed (${res.status}).` }]);
+        setMessages((prev) => [...prev, { role: "assistant", content: `Request failed (${res.status})` }]);
+        return;
+      }
+
+      const json = await res.json().catch(() => null);
+      if (!json) {
+        setMessages((prev) => [...prev, { role: "assistant", content: "Invalid response from server." }]);
+        return;
+      }
+
+      const parsed = parseApiPayload(json);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant" as const,
+          content: parsed.content,
+          answerText: parsed.answerText,
+          sources: parsed.sources,
+          relatedQuestions: parsed.relatedQuestions,
+          raw: parsed.raw,
+        },
+      ]);
+      // Restore bottom follow unless user intervened
+      if (!manualLockRef.current) {
+        followModeRef.current = "bottom";
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";

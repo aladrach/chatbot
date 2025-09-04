@@ -190,6 +190,17 @@ export default function ChatClient() {
     }
   }, [messages]);
 
+  // Debug latest assistant related questions
+  useEffect(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i] as any;
+      if (m && m.role === "assistant") {
+        console.debug("latest assistant relatedQuestions", m.relatedQuestions);
+        break;
+      }
+    }
+  }, [messages]);
+
   // Force PerfectScrollbar initialization on mount
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -217,10 +228,20 @@ export default function ChatClient() {
       }
     }
     const sources = Array.from(sourcesMap.values());
+
+    // Strip proposed follow-ups and prefer them for related questions
+    const extraction = extractProposedFollowUps(answerText || "");
+    console.debug("parseApiPayload: extraction", { followUps: extraction.followUps, beforeAnswerLen: (answerText || "").length, afterAnswerLen: (extraction.cleanedText || "").length, streamedRelated: relatedQuestions });
+    const finalAnswer = extraction.cleanedText || answerText || "";
+    const parsedFollowUps = extraction.followUps;
+    const finalRelated = (parsedFollowUps && parsedFollowUps.length > 0)
+      ? parsedFollowUps
+      : (Array.isArray(relatedQuestions) ? relatedQuestions : undefined);
+
     return {
-      content: answerText || "",
-      answerText: answerText || undefined,
-      relatedQuestions: relatedQuestions && Array.isArray(relatedQuestions) ? relatedQuestions : undefined,
+      content: finalAnswer,
+      answerText: finalAnswer || undefined,
+      relatedQuestions: finalRelated,
       sources: sources.length ? sources : undefined,
       raw: payload,
     };
@@ -260,6 +281,74 @@ export default function ChatClient() {
       }
     } catch {}
   }, []);
+
+  function extractProposedFollowUps(input: string): { cleanedText: string; followUps: string[] } {
+    if (!input) {
+      console.debug("extractProposedFollowUps: empty input");
+      return { cleanedText: input, followUps: [] };
+    }
+
+    // 1) Try to extract from HTML structure if present
+    const htmlSectionRegex = /(<p[^>]*>\s*Proposed\s+follow[-\s]*up\s+questions:\s*<\/p>\s*<ul[^>]*>)([\s\S]*?)(<\/ul>)/i;
+    const htmlMatch = input.match(htmlSectionRegex);
+    if (htmlMatch) {
+      const listHtml = htmlMatch[2] || "";
+      const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+      const followUps: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = liRegex.exec(listHtml)) !== null) {
+        const raw = (m[1] || "")
+          .replace(/<[^>]+>/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (raw) followUps.push(raw);
+      }
+      const cleanedText = input.replace(htmlMatch[0], "");
+      console.debug("extractProposedFollowUps: HTML section found", { count: followUps.length, followUps });
+      return { cleanedText, followUps };
+    }
+
+    // 2) Markdown/plain text parsing
+    const lines = input.split(/\r?\n/);
+    const headingRegex = /^\s*(?:#+\s*)?(?:\*\*[^*]*\*\*\s*)?Proposed\s+follow[-\s]*up\s+questions:\s*$/i;
+    let headerIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (headingRegex.test(lines[i])) {
+        headerIndex = i;
+        break;
+      }
+    }
+    if (headerIndex === -1) {
+      console.debug("extractProposedFollowUps: no section found");
+      return { cleanedText: input, followUps: [] };
+    }
+
+    // Optionally skip an empty line after the header
+    let idx = headerIndex + 1;
+    if (idx < lines.length && /^\s*$/.test(lines[idx])) idx++;
+
+    const bulletRegex = /^\s*(?:[\-\*\u2022]|\d+\.)\s+(.*\S)\s*$/;
+    const followUps: string[] = [];
+    let endIdx = idx;
+    while (endIdx < lines.length) {
+      const line = lines[endIdx];
+      const m = line.match(bulletRegex);
+      if (!m) break;
+      const text = (m[1] || "").trim();
+      if (text) followUps.push(text);
+      endIdx++;
+    }
+
+    if (followUps.length === 0) {
+      console.debug("extractProposedFollowUps: header found but no bullets");
+      return { cleanedText: input, followUps: [] };
+    }
+
+    const cleanedLines = lines.slice(0, headerIndex).concat(lines.slice(endIdx));
+    const cleanedText = cleanedLines.join("\n");
+    console.debug("extractProposedFollowUps: Markdown section found", { count: followUps.length, followUps });
+    return { cleanedText, followUps };
+  }
 
   async function sendMessage(textOverride?: string) {
     const text = (textOverride ?? input).trim();
@@ -311,6 +400,12 @@ export default function ChatClient() {
 
           if (hasNewDeltas) {
             const sources = Array.from(sourcesMap.values());
+            const extractionLive = extractProposedFollowUps(accumulatedText);
+            const liveAnswerText = extractionLive.cleanedText || accumulatedText;
+            const liveFollowUps = extractionLive.followUps;
+            if (extractionLive.followUps.length > 0) {
+              console.debug("stream: extracted follow-ups live", extractionLive.followUps);
+            }
             setMessages((prev) => {
               const next = [...prev];
               let foundStreaming = false;
@@ -319,10 +414,12 @@ export default function ChatClient() {
                 if (m.role === "assistant" && (m as any).streaming) {
                   next[i] = {
                     role: "assistant" as const,
-                    content: accumulatedText || "",
-                    answerText: accumulatedText || undefined,
+                    content: liveAnswerText || "",
+                    answerText: liveAnswerText || undefined,
                     sources: sources.length ? sources : undefined,
-                    relatedQuestions,
+                    relatedQuestions: (liveFollowUps && liveFollowUps.length > 0)
+                      ? liveFollowUps
+                      : relatedQuestions,
                     raw: (m as any).raw,
                     streaming: true,
                   };
@@ -333,10 +430,12 @@ export default function ChatClient() {
               if (!foundStreaming && accumulatedText.length > 0) {
                 const newMessage = {
                   role: "assistant" as const,
-                  content: accumulatedText,
-                  answerText: accumulatedText,
+                  content: liveAnswerText,
+                  answerText: liveAnswerText,
                   sources: sources.length ? sources : undefined,
-                  relatedQuestions,
+                  relatedQuestions: (liveFollowUps && liveFollowUps.length > 0)
+                    ? liveFollowUps
+                    : relatedQuestions,
                   streaming: true,
                 };
                 next.push(newMessage);
@@ -404,6 +503,10 @@ export default function ChatClient() {
           followModeRef.current = "bottom";
         }
         const finalSources = Array.from(sourcesMap.values());
+        const extraction = extractProposedFollowUps(accumulatedText);
+        const finalAnswerText = extraction.cleanedText;
+        const parsedFollowUps = extraction.followUps;
+        console.debug("stream: final extraction", { followUps: parsedFollowUps, finalAnswerLen: (finalAnswerText || "").length, streamedRelated: relatedQuestions });
         setMessages((prev) => {
           const next = [...prev];
           for (let i = next.length - 1; i >= 0; i--) {
@@ -413,7 +516,13 @@ export default function ChatClient() {
                 ...(m as any),
                 streaming: false,
                 sources: finalSources.length > 0 ? finalSources : undefined,
-                relatedQuestions: relatedQuestions || undefined,
+                // Prefer parsed follow-ups; fallback to streamed relatedQuestions
+                relatedQuestions: (parsedFollowUps && parsedFollowUps.length > 0)
+                  ? parsedFollowUps
+                  : (relatedQuestions || undefined),
+                // Also strip the follow-ups section from displayed content
+                content: finalAnswerText || (m as any).content,
+                answerText: finalAnswerText || (m as any).answerText,
               } as any;
               return next;
             }
@@ -569,7 +678,7 @@ export default function ChatClient() {
 
                         {isAssistant && "relatedQuestions" in m && m.relatedQuestions && m.relatedQuestions.length > 0 && (
                           <div className="mt-3">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Related questions</div>
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Suggested questions</div>
                             <div className="flex flex-wrap gap-2">
                               {m.relatedQuestions.map((q, idx) => (
                                 <button

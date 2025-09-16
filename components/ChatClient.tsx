@@ -30,6 +30,8 @@ export default function ChatClient() {
   const [isStreaming, setIsStreaming] = useState(false);
   const scrollbarRef = useRef<any>(null);
   const [recommendedQuestions, setRecommendedQuestions] = useState<string[]>([]);
+  const [featuredPages, setFeaturedPages] = useState<{ name: string; url: string }[]>([]);
+  const [ctaItems, setCtaItems] = useState<{ name: string; url: string }[]>([]);
   const lastSentUserIdRef = useRef<number | null>(null);
   const lastSentUserElementRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollToUserRef = useRef(false);
@@ -281,6 +283,42 @@ export default function ChatClient() {
         }
       }
     } catch {}
+  }, []);
+
+  // Fetch featured pages (Webflow collection) once
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/featured-pages", { method: "GET", cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => null);
+        if (!json) return;
+        const items = Array.isArray(json?.items) ? json.items : [];
+        if (!cancelled) setFeaturedPages(items);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch CTA items
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/cta", { method: "GET", cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => null);
+        if (!json) return;
+        const items = Array.isArray(json?.items) ? json.items : [];
+        if (!cancelled) setCtaItems(items);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function extractProposedFollowUps(input: string): { cleanedText: string; followUps: string[] } {
@@ -615,6 +653,38 @@ export default function ChatClient() {
             </PerfectScrollbar>
             </div>
           </div>
+          {featuredPages.length > 0 && (
+            <div className="w-full slide-up flex-shrink-0">
+              <div className="flex flex-wrap gap-2 px-1 pb-1">
+                {featuredPages.map((item, idx) => (
+                  <a
+                    key={`${idx}-${item.url}`}
+                    href={item.url}
+                    target="_parent"
+                    rel="noreferrer noopener"
+                    className="text-xs px-3 py-1 rounded-full bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+                  >
+                    {item.name}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {ctaItems.length > 0 && (
+            <div className="w-full slide-up flex-shrink-0">
+              {ctaItems.map((item, idx) => (
+                <a
+                  key={`${idx}-${item.url}`}
+                  href={item.url}
+                  target="_parent"
+                  rel="noreferrer noopener"
+                  className="block w-full text-center px-4 py-3 rounded-md bg-foreground text-background hover:opacity-90 transition-opacity"
+                >
+                  {item.name}
+                </a>
+              ))}
+            </div>
+          )}
           <div className="flex w-full items-center gap-2 slide-up flex-shrink-0">
             <Input
               placeholder="Type your question and press Enter"

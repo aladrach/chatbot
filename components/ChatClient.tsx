@@ -398,7 +398,7 @@ export default function ChatClient() {
     const text = (textOverride ?? input).trim();
     if (!text || isLoading) return;
     setIsLoading(true);
-    // Keep FAQs state persistent after submitting
+    setFaqsExpanded(false); // collapse FAQs after submitting
     const id = Date.now();
     lastSentUserIdRef.current = id;
     pendingScrollToUserRef.current = true;

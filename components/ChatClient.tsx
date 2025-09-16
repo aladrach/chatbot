@@ -38,6 +38,7 @@ export default function ChatClient() {
   const listenersAttachedRef = useRef(false);
   const manualLockRef = useRef(false);
   const chatWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [faqsExpanded, setFaqsExpanded] = useState(false);
 
   function resolveScrollContainer(): HTMLElement | null {
     // If we already resolved a working scroll container and it's still in the DOM, reuse it
@@ -359,6 +360,7 @@ export default function ChatClient() {
     const text = (textOverride ?? input).trim();
     if (!text || isLoading) return;
     setIsLoading(true);
+    setFaqsExpanded(false); // collapse FAQs after submitting
     const id = Date.now();
     lastSentUserIdRef.current = id;
     pendingScrollToUserRef.current = true;
@@ -481,6 +483,40 @@ export default function ChatClient() {
                 )}
               </div>
             ) : (
+              <>
+              {recommendedQuestions.length > 0 && (
+                <div className="mb-3 rounded-lg border border-border/50 bg-background/50">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setFaqsExpanded((v) => !v)}
+                    aria-expanded={faqsExpanded}
+                    aria-controls="faqs-collapse"
+                  >
+                    <span>FAQs</span>
+                    <span className={`inline-block transform transition-transform ${faqsExpanded ? "rotate-180" : "rotate-0"}`} aria-hidden>
+                      ▼
+                    </span>
+                  </button>
+                  {faqsExpanded && (
+                    <div id="faqs-collapse" className="px-3 pb-3">
+                      <div className="flex flex-wrap gap-2">
+                        {recommendedQuestions.map((q, idx) => (
+                          <button
+                            key={`${idx}-${q}`}
+                            type="button"
+                            className="text-xs underline hover:no-underline px-2 py-1 rounded-md related-question-btn text-left cursor-pointer"
+                            onClick={() => handleAsk(q)}
+                            aria-label={`Use FAQ: ${q}`}
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <ul className="flex flex-col gap-3">
                 {messages.map((m, i) => {
                   const isAssistant = m.role === "assistant";
@@ -564,6 +600,7 @@ export default function ChatClient() {
                 })}
                 <div ref={messagesEndRef} />
               </ul>
+              </>
             )}
             {isStreaming && (
               <div className="mt-2 ml-1 flex items-center gap-2 text-xs text-muted-foreground typing-indicator slide-up">

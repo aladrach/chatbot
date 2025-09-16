@@ -398,7 +398,7 @@ export default function ChatClient() {
     const text = (textOverride ?? input).trim();
     if (!text || isLoading) return;
     setIsLoading(true);
-    setFaqsExpanded(false); // collapse FAQs after submitting
+    // Keep FAQs state persistent after submitting
     const id = Date.now();
     lastSentUserIdRef.current = id;
     pendingScrollToUserRef.current = true;
@@ -523,7 +523,7 @@ export default function ChatClient() {
             ) : (
               <>
               {recommendedQuestions.length > 0 && (
-                <div className="mb-3 rounded-lg border border-border/50 bg-background/50">
+                <div className="sticky top-0 z-20 mb-3 rounded-lg border border-border/50 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                   <button
                     type="button"
                     className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"

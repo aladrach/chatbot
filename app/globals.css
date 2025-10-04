@@ -52,18 +52,21 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.55 0.25 271.96);
+  /* Incorta Dark Blue #241C55 as primary */
+  --primary: oklch(0.28 0.12 285);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  /* Incorta Purple #4854FE for accents */
+  --secondary: oklch(0.55 0.25 271.96);
+  --secondary-foreground: oklch(0.985 0 0);
+  /* Incorta Teal #00A098 */
+  --accent: oklch(0.61 0.13 192);
+  --accent-foreground: oklch(0.985 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.65 0.22 15);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.55 0.25 271.96);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -71,7 +74,7 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.28 0.12 285);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
@@ -86,18 +89,21 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.55 0.25 271.96);
-  --primary-foreground:  oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
+  /* Incorta Dark Blue #241C55 as primary */
+  --primary: oklch(0.28 0.12 285);
+  --primary-foreground: oklch(0.985 0 0);
+  /* Incorta Purple #4854FE for accents */
+  --secondary: oklch(0.55 0.25 271.96);
   --secondary-foreground: oklch(0.985 0 0);
+  /* Incorta Teal #00A098 */
+  --accent: oklch(0.61 0.13 192);
+  --accent-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
+  --destructive: oklch(0.65 0.22 15);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.55 0.25 271.96);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -105,7 +111,7 @@
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: oklch(0.28 0.12 285);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
@@ -211,15 +217,16 @@
   }
   
   .message-bubble-user {
+    /* Incorta Purple gradient for user messages */
     background: linear-gradient(
       135deg,
-      rgba(79, 70, 229, 0.28) 0%,
-      rgba(99, 102, 241, 0.25) 100%
+      rgba(72, 84, 254, 0.28) 0%,
+      rgba(72, 84, 254, 0.20) 100%
     );
-    border: 1px solid rgba(99, 102, 241, 0.5);
+    border: 1px solid rgba(72, 84, 254, 0.5);
     color: rgb(31, 41, 55);
     box-shadow: 
-      0 2px 8px rgba(79, 70, 229, 0.2),
+      0 2px 8px rgba(72, 84, 254, 0.2),
       0 1px 3px rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(10px);
   }
@@ -240,26 +247,28 @@
 
   /* Dark mode message bubbles */
   .dark .message-bubble-user {
+    /* Incorta Purple gradient for user messages */
     background: linear-gradient(
       135deg,
-      rgba(79, 70, 229, 0.45) 0%,
-      rgba(99, 102, 241, 0.35) 100%
+      rgba(72, 84, 254, 0.45) 0%,
+      rgba(72, 84, 254, 0.30) 100%
     );
-    border: 1px solid rgba(99, 102, 241, 0.65);
+    border: 1px solid rgba(72, 84, 254, 0.65);
     color: rgb(255, 255, 255);
     box-shadow: 
-      0 2px 8px rgba(79, 70, 229, 0.3),
+      0 2px 8px rgba(72, 84, 254, 0.3),
       0 1px 3px rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(12px);
   }
   
   .dark .message-bubble-assistant {
+    /* Incorta Dark Blue gradient for assistant messages */
     background: linear-gradient(
       135deg,
-      rgba(40, 37, 85, 0.85) 0%,
-      rgba(55, 52, 100, 0.75) 100%
+      rgba(36, 28, 85, 0.85) 0%,
+      rgba(36, 28, 85, 0.75) 100%
     );
-    border: 1px solid rgba(99, 102, 241, 0.4);
+    border: 1px solid rgba(72, 84, 254, 0.4);
     color: rgb(245, 245, 255);
     box-shadow: 
       0 2px 8px rgba(0, 0, 0, 0.4),
@@ -268,16 +277,18 @@
   }
   
   .source-link {
-    color: rgb(59, 130, 246);
+    /* Incorta Purple for links */
+    color: rgb(72, 84, 254);
     text-decoration: underline;
-    text-decoration-color: rgba(59, 130, 246, 0.3);
+    text-decoration-color: rgba(72, 84, 254, 0.3);
     text-underline-offset: 2px;
     transition: all 0.2s ease;
   }
   
   .source-link:hover {
-    color: rgb(37, 99, 235);
-    text-decoration-color: rgba(37, 99, 235, 0.6);
+    color: rgb(72, 84, 254);
+    text-decoration-color: rgba(72, 84, 254, 0.6);
+    opacity: 0.9;
   }
   
   .related-question-btn {
@@ -291,19 +302,22 @@
   
   .related-question-btn:hover {
     opacity: 1;
-    border-color: rgba(99, 102, 241, 0.6);
-    color: rgb(99, 102, 241);
+    /* Incorta Purple for hover */
+    border-color: rgba(72, 84, 254, 0.6);
+    color: rgb(72, 84, 254);
   }
 
   /* Dark mode source links and buttons */
   .dark .source-link {
-    color: rgb(147, 197, 253);
-    text-decoration-color: rgba(147, 197, 253, 0.3);
+    /* Incorta Purple for dark mode links */
+    color: rgb(72, 84, 254);
+    text-decoration-color: rgba(72, 84, 254, 0.3);
   }
   
   .dark .source-link:hover {
-    color: rgb(191, 219, 254);
-    text-decoration-color: rgba(191, 219, 254, 0.6);
+    color: rgb(72, 84, 254);
+    text-decoration-color: rgba(72, 84, 254, 0.6);
+    opacity: 0.9;
   }
   
   .dark .related-question-btn {
@@ -313,8 +327,9 @@
   
   .dark .related-question-btn:hover {
     opacity: 1;
-    border-color: rgba(147, 197, 253, 0.6);
-    color: rgb(147, 197, 253);
+    /* Incorta Purple for dark mode hover */
+    border-color: rgba(72, 84, 254, 0.6);
+    color: rgb(72, 84, 254);
   }
   
   /* FAQ container question button overrides */
@@ -389,29 +404,31 @@
   }
   
   .faq-container {
+    /* Incorta Purple gradient for FAQ container */
     background: linear-gradient(
       135deg,
-      rgba(79, 70, 229, 0.85) 0%,
-      rgba(99, 102, 241, 0.75) 50%,
-      rgba(67, 56, 202, 0.85) 100%
+      rgba(72, 84, 254, 0.85) 0%,
+      rgba(72, 84, 254, 0.75) 50%,
+      rgba(36, 28, 85, 0.85) 100%
     );
-    border: 1px solid rgba(147, 197, 253, 0.3);
+    border: 1px solid rgba(72, 84, 254, 0.4);
     box-shadow: 
-      0 4px 12px rgba(79, 70, 229, 0.3),
+      0 4px 12px rgba(72, 84, 254, 0.3),
       0 2px 6px rgba(0, 0, 0, 0.2),
       inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
   
   .dark .faq-container {
+    /* Incorta Dark Blue to Purple gradient for dark mode */
     background: linear-gradient(
       135deg,
-      rgba(79, 70, 229, 0.9) 0%,
-      rgba(99, 102, 241, 0.8) 50%,
-      rgba(67, 56, 202, 0.9) 100%
+      rgba(36, 28, 85, 0.9) 0%,
+      rgba(72, 84, 254, 0.8) 50%,
+      rgba(36, 28, 85, 0.9) 100%
     );
-    border: 1px solid rgba(147, 197, 253, 0.25);
+    border: 1px solid rgba(72, 84, 254, 0.4);
     box-shadow: 
-      0 4px 16px rgba(79, 70, 229, 0.4),
+      0 4px 16px rgba(72, 84, 254, 0.4),
       0 2px 8px rgba(0, 0, 0, 0.3),
       inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }

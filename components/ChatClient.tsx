@@ -35,14 +35,12 @@ export default function ChatClient() {
   const lastSentUserIdRef = useRef<number | null>(null);
   const lastSentUserElementRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollToUserRef = useRef(false);
-  const lastAssistantIdRef = useRef<number | null>(null);
-  const lastAssistantElementRef = useRef<HTMLDivElement | null>(null);
-  const pendingScrollToAssistantRef = useRef(false);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const followModeRef = useRef<"bottom" | "topAnchor" | "manual">("bottom");
+  const listenersAttachedRef = useRef(false);
+  const manualLockRef = useRef(false);
   const chatWrapperRef = useRef<HTMLDivElement | null>(null);
   const [faqsExpanded, setFaqsExpanded] = useState(false);
-  const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set());
 
   function resolveScrollContainer(): HTMLElement | null {
     // If we already resolved a working scroll container and it's still in the DOM, reuse it
@@ -98,83 +96,29 @@ export default function ChatClient() {
     return offset;
   }
 
-  // Removed: user-interaction listeners that stopped auto-scrolling
+  // Attach user-interaction listeners to stop auto-scrolling when the user scrolls or drags
+  useEffect(() => {
+    if (listenersAttachedRef.current) return;
+    const container = resolveScrollContainer();
+    if (!container) return;
+    const stopAuto = () => {
+      manualLockRef.current = true;
+      followModeRef.current = "manual";
+      pendingScrollToUserRef.current = false;
+    };
+    container.addEventListener("wheel", stopAuto, { passive: true });
+    container.addEventListener("pointerdown", stopAuto, { passive: true });
+    container.addEventListener("touchstart", stopAuto, { passive: true });
+    listenersAttachedRef.current = true;
+    return () => {
+      try { container.removeEventListener("wheel", stopAuto as any); } catch {}
+      try { container.removeEventListener("pointerdown", stopAuto as any); } catch {}
+      try { container.removeEventListener("touchstart", stopAuto as any); } catch {}
+      listenersAttachedRef.current = false;
+    };
+  }, [messages.length]);
 
   useLayoutEffect(() => {
-    console.log("useLayoutEffect triggered - pendingScrollToAssistant:", pendingScrollToAssistantRef.current, "hasElementRef:", !!lastAssistantElementRef.current);
-    if (pendingScrollToAssistantRef.current && lastAssistantElementRef.current) {
-      console.log("Attempting to scroll to assistant message");
-      // Clear the flag immediately to prevent multiple scroll attempts
-      pendingScrollToAssistantRef.current = false;
-      
-      // Scroll the PerfectScrollbar container so the just-received assistant message aligns to top
-      const container = resolveScrollContainer();
-      const target = lastAssistantElementRef.current as HTMLElement;
-      console.log("Container:", container, "Target:", target);
-      try {
-        if (container) {
-          const doScroll = () => {
-            const padTop = parseFloat(getComputedStyle(container).paddingTop || "0") || 0;
-            const topRaw = computeOffsetTop(container, target);
-            
-            // Calculate FAQs height for offset
-            const faqsElement = container.querySelector('.sticky.top-0');
-            const faqsHeight = faqsElement ? faqsElement.getBoundingClientRect().height : 0;
-            const additionalOffset = 16; // Extra padding below FAQs
-            
-            const top = Math.max(0, topRaw - padTop - faqsHeight - additionalOffset);
-            console.log("Before scroll - scrollTop:", container.scrollTop, "scrollHeight:", container.scrollHeight);
-            console.log("FAQs height:", faqsHeight, "Scrolling to top:", top);
-            
-            // Smooth scroll animation for PerfectScrollbar
-            const startPos = container.scrollTop;
-            const distance = top - startPos;
-            const duration = 600; // milliseconds
-            const startTime = performance.now();
-            
-            const easeInOutQuad = (t: number) => {
-              return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-            };
-            
-            const animate = (currentTime: number) => {
-              const elapsed = currentTime - startTime;
-              const progress = Math.min(elapsed / duration, 1);
-              const easeProgress = easeInOutQuad(progress);
-              
-              container.scrollTop = startPos + (distance * easeProgress);
-              try { scrollbarRef.current?.updateScroll?.(); } catch {}
-              
-              if (progress < 1) {
-                requestAnimationFrame(animate);
-              } else {
-                console.log("After scroll - scrollTop:", container.scrollTop);
-              }
-            };
-            
-            requestAnimationFrame(animate);
-          };
-          // Ensure PS has updated sizes before scroll
-          try { scrollbarRef.current?.updateScroll?.(); } catch {}
-          // Add delay to ensure DOM is fully rendered
-          setTimeout(() => {
-            requestAnimationFrame(() => {
-              doScroll();
-              setTimeout(() => { try { scrollbarRef.current?.updateScroll?.(); } catch {} }, 60);
-            });
-          }, 100);
-        } else {
-          console.log("No container found, using fallback");
-          // best-effort fallback
-          setTimeout(() => {
-            target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
-          }, 100);
-        }
-      } catch (e) {
-        console.error("Error scrolling to assistant:", e);
-      }
-      return;
-    }
-
     if (pendingScrollToUserRef.current && lastSentUserElementRef.current) {
       // Scroll the PerfectScrollbar container so the just-sent user message aligns to top
       const getScrollContainer = (): HTMLElement | null => {
@@ -454,11 +398,11 @@ export default function ChatClient() {
     const text = (textOverride ?? input).trim();
     if (!text || isLoading) return;
     setIsLoading(true);
-    setIsStreaming(true);
     setFaqsExpanded(false); // collapse FAQs after submitting
     const id = Date.now();
     lastSentUserIdRef.current = id;
     pendingScrollToUserRef.current = true;
+    manualLockRef.current = false;
     followModeRef.current = "topAnchor";
     setMessages((prev) => [...prev, { role: "user", content: text, id } as any]);
     setInput("");
@@ -466,7 +410,7 @@ export default function ChatClient() {
       const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: text, stream: true }),
+        body: JSON.stringify({ query: text }),
       });
 
       if (!res.ok) {
@@ -475,160 +419,27 @@ export default function ChatClient() {
         return;
       }
 
-      const contentType = res.headers.get("content-type");
-      
-      // Handle streaming response
-      if (contentType?.includes("text/event-stream")) {
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
-        
-        if (!reader) {
-          setMessages((prev) => [...prev, { role: "assistant", content: "No readable stream" }]);
-          return;
-        }
+      const json = await res.json().catch(() => null);
+      if (!json) {
+        setMessages((prev) => [...prev, { role: "assistant", content: "Invalid response from server." }]);
+        return;
+      }
 
-        const assistantId = Date.now();
-        lastAssistantIdRef.current = assistantId;
-        
-        // Add initial empty assistant message
-        setMessages((prev) => [...prev, {
-          role: "assistant",
-          content: "",
-          streaming: true,
-          id: assistantId,
-        } as any]);
-        
-        let accumulated = "";
-        let buffer = "";
-        
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            buffer += decoder.decode(value, { stream: true });
-            
-            // Process SSE format (data: {...}\n\n)
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || ""; // Keep incomplete line in buffer
-            
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                const data = line.slice(6).trim();
-                if (data === "[DONE]") continue;
-                
-                try {
-                  const chunk = JSON.parse(data);
-                  
-                  // Handle different streaming formats from Vertex AI
-                  const text = chunk?.candidates?.[0]?.content?.parts?.[0]?.text || 
-                               chunk?.text || 
-                               chunk?.content || 
-                               "";
-                  
-                  if (text) {
-                    accumulated += text;
-                    
-                    // Update the message with accumulated content
-                    setMessages((prev) => 
-                      prev.map((msg) => 
-                        (msg as any).id === assistantId
-                          ? { ...msg, content: accumulated }
-                          : msg
-                      )
-                    );
-                  }
-                } catch (e) {
-                  console.warn("Failed to parse streaming chunk:", data, e);
-                }
-              }
-            }
-          }
-          
-          // Process any remaining buffer
-          if (buffer.startsWith("data: ")) {
-            const data = buffer.slice(6).trim();
-            try {
-              const chunk = JSON.parse(data);
-              const text = chunk?.candidates?.[0]?.content?.parts?.[0]?.text || 
-                           chunk?.text || 
-                           chunk?.content || 
-                           "";
-              if (text) {
-                accumulated += text;
-              }
-            } catch (e) {
-              console.warn("Failed to parse final chunk:", data, e);
-            }
-          }
-        } catch (streamError) {
-          console.error("Stream reading error:", streamError);
-          setMessages((prev) => 
-            prev.map((msg) => 
-              (msg as any).id === assistantId
-                ? { ...msg, content: accumulated || "Error reading stream", streaming: false }
-                : msg
-            )
-          );
-          return;
-        }
-        
-        // Parse final response to extract metadata (sources, related questions)
-        try {
-          const parsed = parseApiPayload({ answerText: accumulated });
-          pendingScrollToAssistantRef.current = true;
-          followModeRef.current = "manual";
-          
-          setMessages((prev) =>
-            prev.map((msg) =>
-              (msg as any).id === assistantId
-                ? {
-                    ...msg,
-                    content: parsed.content,
-                    answerText: parsed.answerText,
-                    sources: parsed.sources,
-                    relatedQuestions: parsed.relatedQuestions,
-                    streaming: false,
-                  }
-                : msg
-            )
-          );
-        } catch (parseError) {
-          console.error("Parse error:", parseError);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              (msg as any).id === assistantId
-                ? { ...msg, streaming: false }
-                : msg
-            )
-          );
-        }
-      } else {
-        // Fallback to non-streaming response
-        const json = await res.json().catch(() => null);
-        if (!json) {
-          setMessages((prev) => [...prev, { role: "assistant", content: "Invalid response from server." }]);
-          return;
-        }
-
-        const parsed = parseApiPayload(json);
-        const assistantId = Date.now();
-        lastAssistantIdRef.current = assistantId;
-        pendingScrollToAssistantRef.current = true;
-        followModeRef.current = "manual";
-        console.log("Setting assistant message with ID:", assistantId, "pendingScroll:", true);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant" as const,
-            content: parsed.content,
-            answerText: parsed.answerText,
-            sources: parsed.sources,
-            relatedQuestions: parsed.relatedQuestions,
-            raw: parsed.raw,
-            id: assistantId,
-          } as any,
-        ]);
+      const parsed = parseApiPayload(json);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant" as const,
+          content: parsed.content,
+          answerText: parsed.answerText,
+          sources: parsed.sources,
+          relatedQuestions: parsed.relatedQuestions,
+          raw: parsed.raw,
+        },
+      ]);
+      // Restore bottom follow unless user intervened
+      if (!manualLockRef.current) {
+        followModeRef.current = "bottom";
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
@@ -652,18 +463,6 @@ export default function ChatClient() {
     if (!q) return;
     setInput(q);
     void sendMessage(q);
-  }
-
-  function toggleSources(messageIndex: number) {
-    setExpandedSources((prev) => {
-      const next = new Set(prev);
-      if (next.has(messageIndex)) {
-        next.delete(messageIndex);
-      } else {
-        next.add(messageIndex);
-      }
-      return next;
-    });
   }
 
   return (
@@ -691,33 +490,30 @@ export default function ChatClient() {
               >
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full py-12 fade-in">
-                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.15) 0%, rgba(99, 102, 241, 0.10) 100%)', border: '1px solid rgba(99, 102, 241, 0.3)'}}>
-                  <svg className="w-8 h-8" style={{color: 'rgb(147, 197, 253)'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <div className="w-16 h-16 rounded-full bg-secondary/20 border-2 border-secondary/40 flex items-center justify-center mb-4">
+                  <svg className="w-8 h-8 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <p className="text-sm text-center">
+                <p className="text-sm text-muted-foreground text-center">
                   Ask a question about Incorta docs to get started.
                 </p>
-                <p className="text-xs opacity-70 text-center mt-2">
+                <p className="text-xs text-muted-foreground/70 text-center mt-2">
                   I can help you find information, explain concepts, and answer questions about Incorta.
                 </p>
                 {recommendedQuestions.length > 0 && (
                   <div className="mt-5 w-full max-w-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wide mb-3 text-center opacity-90">Recommended questions</div>
-                    <div className="flex flex-col gap-2 items-center text-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 text-center">Recommended questions</div>
+                    <div className="flex flex-wrap gap-2 justify-center">
                       {recommendedQuestions.map((q, idx) => (
                         <button
                           key={`${idx}-${q}`}
                           type="button"
-                          className="related-question-btn cursor-pointer inline-flex items-center gap-2 group"
+                          className="text-xs underline hover:no-underline px-2 py-1 rounded-md related-question-btn text-left cursor-pointer"
                           onClick={() => handleAsk(q)}
                           aria-label={`Use recommended question: ${q}`}
                         >
-                          <svg className="w-3.5 h-3.5 flex-shrink-0 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                          <span>{q}</span>
+                          {q}
                         </button>
                       ))}
                     </div>
@@ -727,10 +523,10 @@ export default function ChatClient() {
             ) : (
               <>
               {recommendedQuestions.length > 0 && (
-                <div className="sticky top-0 z-20 mb-3 rounded-lg backdrop-blur-md shadow-lg faq-container">
+                <div className="sticky top-0 z-20 mb-3 rounded-lg border border-border/50 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                   <button
                     type="button"
-                    className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-white hover:bg-white/10 transition-all rounded-lg"
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => setFaqsExpanded((v) => !v)}
                     aria-expanded={faqsExpanded}
                     aria-controls="faqs-collapse"
@@ -741,20 +537,17 @@ export default function ChatClient() {
                     </span>
                   </button>
                   {faqsExpanded && (
-                    <div id="faqs-collapse" className="px-4 pb-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="flex flex-col gap-2 text-sm">
+                    <div id="faqs-collapse" className="px-3 pb-3">
+                      <div className="flex flex-wrap gap-2">
                         {recommendedQuestions.map((q, idx) => (
                           <button
                             key={`${idx}-${q}`}
                             type="button"
-                            className="related-question-btn text-left cursor-pointer inline-flex items-center gap-2 w-fit group text-white/90 hover:text-white"
+                            className="text-xs underline hover:no-underline px-2 py-1 rounded-md related-question-btn text-left cursor-pointer"
                             onClick={() => handleAsk(q)}
                             aria-label={`Use FAQ: ${q}`}
                           >
-                            <svg className="w-3.5 h-3.5 flex-shrink-0 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                            <span>{q}</span>
+                            {q}
                           </button>
                         ))}
                       </div>
@@ -768,12 +561,7 @@ export default function ChatClient() {
                   const isStreaming = isAssistant && (m as any).streaming;
                   const messageText = isAssistant ? ((m as any).answerText ?? m.content) : m.content;
                   const isJustSentUser = !isAssistant && (m as any).id && (m as any).id === lastSentUserIdRef.current;
-                  const isJustReceivedAssistant = isAssistant && (m as any).id && (m as any).id === lastAssistantIdRef.current;
                   const key = (m as any).id ?? `${m.role}-${i}`;
-                  
-                  if (isJustReceivedAssistant) {
-                    console.log("Rendering latest assistant message with ID:", (m as any).id, "lastAssistantId:", lastAssistantIdRef.current);
-                  }
                   
                   return (
                     <li key={key} className={`${isAssistant ? "flex justify-start" : "flex justify-end"} fade-in`}>
@@ -783,7 +571,7 @@ export default function ChatClient() {
                             ? "max-w-[85%] rounded-2xl px-4 py-2 text-sm message-bubble-assistant"
                             : "max-w-[85%] rounded-2xl px-4 py-2 text-sm message-bubble-user"
                         }
-                        ref={isJustSentUser ? lastSentUserElementRef : (isJustReceivedAssistant ? lastAssistantElementRef : undefined)}
+                        ref={isJustSentUser ? lastSentUserElementRef : undefined}
                       >
                         {isAssistant ? (
                           <div className="prose prose-sm dark:prose-invert max-w-none fade-in">
@@ -809,55 +597,36 @@ export default function ChatClient() {
                         )}
 
                         {isAssistant && "sources" in m && m.sources && m.sources.length > 0 && (
-                          <div className="mt-4 pt-3 border-t border-current/20">
-                            <button
-                              type="button"
-                              className="w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wide mb-2 opacity-90 hover:opacity-100 transition-opacity cursor-pointer"
-                              onClick={() => toggleSources(i)}
-                              aria-expanded={expandedSources.has(i)}
-                              aria-controls={`sources-${i}`}
-                            >
-                              <span>Sources ({m.sources.length})</span>
-                              <span className={`inline-block transform transition-transform ${expandedSources.has(i) ? "rotate-180" : "rotate-0"}`} aria-hidden>
-                                ▼
-                              </span>
-                            </button>
-                            {expandedSources.has(i) && (
-                              <div id={`sources-${i}`} className="flex flex-wrap gap-x-4 gap-y-1 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
-                                {m.sources.map((s, idx) => (
-                                  <a
-                                    key={`${s.uri}-${idx}`}
-                                    className="source-link inline-flex items-center gap-1"
-                                    href={s.uri}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                    </svg>
-                                    <span>{s.title || s.uri}</span>
-                                  </a>
-                                ))}
-                              </div>
-                            )}
+                          <div className="mt-3">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Sources</div>
+                            <div className="flex flex-wrap gap-2">
+                              {m.sources.map((s, idx) => (
+                                <a
+                                  key={`${s.uri}-${idx}`}
+                                  className="text-xs underline hover:no-underline px-2 py-1 rounded-md source-link"
+                                  href={s.uri}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {s.title || s.uri}
+                                </a>
+                              ))}
+                            </div>
                           </div>
                         )}
 
                         {isAssistant && "relatedQuestions" in m && m.relatedQuestions && m.relatedQuestions.length > 0 && (
-                          <div className="mt-4 pt-3 border-t border-current/20">
-                            <div className="text-xs font-semibold uppercase tracking-wide mb-2 opacity-90">Suggested questions</div>
-                            <div className="flex flex-col gap-2 text-sm">
+                          <div className="mt-3">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Suggested questions</div>
+                            <div className="flex flex-wrap gap-2">
                               {m.relatedQuestions.map((q, idx) => (
                                 <button
                                   key={`${idx}-${q}`}
                                   type="button"
-                                  className="related-question-btn text-left cursor-pointer inline-flex items-center gap-2 w-fit group"
+                                  className="text-xs underline hover:no-underline px-2 py-1 rounded-md related-question-btn text-left cursor-pointer"
                                   onClick={() => handleAsk(q)}
                                 >
-                                  <svg className="w-3.5 h-3.5 flex-shrink-0 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                  </svg>
-                                  <span>{q}</span>
+                                  {q}
                                 </button>
                               ))}
                             </div>
@@ -893,7 +662,8 @@ export default function ChatClient() {
                     href={item.url}
                     target="_parent"
                     rel="noreferrer noopener"
-                    className="text-xs px-3 py-1 rounded-full bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+                    className="text-xs px-3 py-1 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
+                    style={{background: 'rgba(0, 160, 152, 0.2)', border: '1px solid rgba(0, 160, 152, 0.4)', color: 'rgb(0, 160, 152)'}}
                   >
                     {item.name}
                   </a>
@@ -909,7 +679,8 @@ export default function ChatClient() {
                   href={item.url}
                   target="_parent"
                   rel="noreferrer noopener"
-                  className="block w-full text-center px-4 py-3 rounded-md bg-foreground text-background hover:opacity-90 transition-opacity"
+                  className="block w-full text-center px-4 py-3 rounded-md hover:opacity-90 transition-all font-semibold"
+                  style={{background: 'linear-gradient(135deg, rgb(72, 84, 254) 0%, rgb(72, 84, 254) 100%)', color: 'white', border: 'none'}}
                 >
                   {item.name}
                 </a>
@@ -925,7 +696,13 @@ export default function ChatClient() {
               disabled={isLoading}
               className="flex-1"
             />
-            <Button type="button" onClick={() => sendMessage()} disabled={isLoading || !input.trim()} className="flex-shrink-0">
+            <Button 
+              type="button" 
+              onClick={() => sendMessage()} 
+              disabled={isLoading || !input.trim()} 
+              className="flex-shrink-0"
+              style={{background: 'linear-gradient(135deg, rgb(72, 84, 254) 0%, rgb(72, 84, 254) 100%)', border: 'none'}}
+            >
               {isLoading ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="inline-block size-4 rounded-full border-2 border-current border-t-transparent animate-spin" />

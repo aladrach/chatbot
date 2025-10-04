@@ -28,6 +28,7 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 - **Source Citations**: Provides references and related questions
 - **Dark Mode Support**: Automatic dark/light theme support
 - **Mobile Optimized**: Touch-friendly interface for mobile devices
+- **Analytics Dashboard**: Password-protected analytics with comprehensive metrics
 
 ## Embedding the Chatbot
 
@@ -92,6 +93,61 @@ See `embedding-example.html` for a complete example showing different embedding 
 - Responsive layouts
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Analytics Dashboard
+
+The chatbot includes a comprehensive, password-protected analytics dashboard to track usage and performance.
+
+### Setup Analytics
+
+1. **Set up Neon Database**:
+   - Sign up at [neon.tech](https://neon.tech)
+   - Create a new project
+   - Copy your connection string
+
+2. **Initialize Database**:
+   - Open Neon SQL Editor
+   - Run the SQL from `lib/schema.sql`
+
+3. **Configure Environment Variables**:
+   Create `.env.local` (use `env.example` as template):
+   ```env
+   DATABASE_URL=postgresql://username:password@host/database?sslmode=require
+   ANALYTICS_USERNAME=admin
+   ANALYTICS_PASSWORD=your-secure-password
+   ```
+
+4. **Install Dependencies**:
+   ```bash
+   pnpm install
+   ```
+
+5. **Deploy to Vercel**:
+   - Add the same environment variables in Vercel dashboard
+   - Settings → Environment Variables
+
+### Accessing Analytics
+
+Visit `/analytics` on your site and login with your credentials.
+
+### Analytics Features
+
+- **Summary Metrics**: Total interactions, avg response time, error rate, sources per response
+- **Top Questions**: Most frequently asked questions with visual charts
+- **Topic Distribution**: Auto-categorized questions (Authentication, API, Data, Security, etc.)
+- **Daily Engagement**: Track interactions and unique sessions over time
+- **Date Filters**: View data for last 7 days, 30 days, or all time
+
+### What's Tracked
+
+Every chat interaction automatically tracks:
+- Question and answer text
+- Response time
+- Error status
+- Number of sources provided
+- Related questions count
+- Session ID (unique per user)
+- User agent and referrer
 
 ## Learn More
 

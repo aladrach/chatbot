@@ -38,15 +38,13 @@ export default function ChatClient() {
   const lastSentUserElementRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollToUserRef = useRef(false);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
-  const followModeRef = useRef<"bottom" | "topAnchor" | "manual">("bottom");
+  const followModeRef = useRef<"top" | "manual">("top");
   const listenersAttachedRef = useRef(false);
   const manualLockRef = useRef(false);
   const chatWrapperRef = useRef<HTMLDivElement | null>(null);
   const [faqsExpanded, setFaqsExpanded] = useState(false);
   
   // New state for enhancements
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [isListening, setIsListening] = useState(false);
   const [collapsedSources, setCollapsedSources] = useState<Set<number>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
@@ -130,76 +128,49 @@ export default function ChatClient() {
   }, [messages.length]);
 
   useLayoutEffect(() => {
+    // When we have a pending scroll to the latest user message, scroll it to the top
     if (pendingScrollToUserRef.current && lastSentUserElementRef.current) {
-      // Scroll the PerfectScrollbar container so the just-sent user message aligns to top
-      const getScrollContainer = (): HTMLElement | null => {
-        return resolveScrollContainer();
-      };
-
-      const container = getScrollContainer();
+      const container = resolveScrollContainer();
       const target = lastSentUserElementRef.current as HTMLElement;
-      try {
-        if (container) {
-          const computeOffsetTop = (parent: HTMLElement, el: HTMLElement): number => {
-            let offset = 0;
-            let node: HTMLElement | null = el;
-            while (node && node !== parent) {
-              offset += node.offsetTop;
-              node = node.offsetParent as HTMLElement | null;
-            }
-            return offset;
-          };
-          const doScroll = () => {
+      if (container && target) {
+        try {
+          // Update scrollbar first
+          try { scrollbarRef.current?.updateScroll?.(); } catch {}
+          
+          requestAnimationFrame(() => {
             const padTop = parseFloat(getComputedStyle(container).paddingTop || "0") || 0;
             const topRaw = computeOffsetTop(container, target);
             const top = Math.max(0, topRaw - padTop);
-            // Immediate position first to guarantee movement, then smooth-correct slightly after
+            
+            // Scroll immediately, then smooth
             container.scrollTop = top;
             setTimeout(() => {
               container.scrollTo({ top, behavior: "smooth" });
+              try { scrollbarRef.current?.updateScroll?.(); } catch {}
             }, 20);
-          };
-          // Ensure PS has updated sizes before scroll
-          try { scrollbarRef.current?.updateScroll?.(); } catch {}
-          requestAnimationFrame(() => {
-            doScroll();
-            setTimeout(() => { try { scrollbarRef.current?.updateScroll?.(); } catch {} }, 60);
           });
-        } else {
-          // best-effort fallback
-          target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+        } catch (e) {
+          console.error("Scroll error:", e);
         }
-      } catch {}
+      }
       pendingScrollToUserRef.current = false;
       return;
     }
 
-    // While in topAnchor mode, continuously keep the just-sent user bubble at the top
-    if (followModeRef.current === "topAnchor" && lastSentUserElementRef.current) {
+    // Continue scrolling to keep the user message at top during response generation
+    if (followModeRef.current === "top" && !manualLockRef.current && lastSentUserElementRef.current) {
       const container = resolveScrollContainer();
       const target = lastSentUserElementRef.current as HTMLElement;
-      if (container) {
-        const padTop = parseFloat(getComputedStyle(container).paddingTop || "0") || 0;
-        const topRaw = computeOffsetTop(container, target);
-        const top = Math.max(0, topRaw - padTop);
-        // Set directly to avoid jitter during frequent updates
-        container.scrollTop = top;
-        try { scrollbarRef.current?.updateScroll?.(); } catch {}
-      }
-      return;
-    }
-
-    // Default behavior only when in bottom follow mode
-    if (followModeRef.current === "bottom") {
-      const container = resolveScrollContainer();
-      if (container) {
-        try { scrollbarRef.current?.updateScroll?.(); } catch {}
-        requestAnimationFrame(() => {
-          container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-          setTimeout(() => { try { scrollbarRef.current?.updateScroll?.(); } catch {} }, 60);
-        });
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (container && target) {
+        try {
+          const padTop = parseFloat(getComputedStyle(container).paddingTop || "0") || 0;
+          const topRaw = computeOffsetTop(container, target);
+          const top = Math.max(0, topRaw - padTop);
+          container.scrollTop = top;
+          try { scrollbarRef.current?.updateScroll?.(); } catch {}
+        } catch (e) {
+          console.error("Scroll error:", e);
+        }
       }
     }
   }, [messages]);
@@ -280,20 +251,10 @@ export default function ChatClient() {
     }
   }, []);
 
-  const scrollToBottom = useCallback(() => {
-    const container = resolveScrollContainer();
-    if (container) {
-      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-      setShowScrollButton(false);
-      setUnreadCount(0);
-    }
-  }, []);
-
   const clearConversation = useCallback(() => {
     if (window.confirm('Clear all messages?')) {
       setMessages([]);
-      setUnreadCount(0);
-      followModeRef.current = "bottom";
+      followModeRef.current = "top";
     }
   }, []);
 
@@ -413,31 +374,6 @@ export default function ChatClient() {
     };
   }, []);
 
-  // Monitor scroll position for scroll-to-bottom button
-  useEffect(() => {
-    const container = resolveScrollContainer();
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-      setShowScrollButton(!isNearBottom && messages.length > 3);
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [messages.length]);
-
-  // Track unread messages when user is scrolled up
-  useEffect(() => {
-    if (showScrollButton && messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role === 'assistant') {
-        setUnreadCount(prev => prev + 1);
-      }
-    }
-  }, [messages.length, showScrollButton]);
-
   // Cycle through suggestions in empty state
   useEffect(() => {
     if (messages.length === 0 && recommendedQuestions.length > 1) {
@@ -530,7 +466,7 @@ export default function ChatClient() {
     lastSentUserIdRef.current = id;
     pendingScrollToUserRef.current = true;
     manualLockRef.current = false;
-    followModeRef.current = "topAnchor";
+    followModeRef.current = "top";
     setMessages((prev) => [...prev, { role: "user", content: text, timestamp: Date.now(), id } as any]);
     setInput("");
     try {
@@ -565,9 +501,9 @@ export default function ChatClient() {
           timestamp: Date.now(),
         },
       ]);
-      // Restore bottom follow unless user intervened
+      // Keep top scroll behavior unless user intervened
       if (!manualLockRef.current) {
-        followModeRef.current = "bottom";
+        followModeRef.current = "top";
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
@@ -642,15 +578,15 @@ export default function ChatClient() {
                 {/* Cycling featured question */}
                 {recommendedQuestions.length > 0 && (
                   <div className="mt-6 w-full max-w-xl animate-slide-down delay-300">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-foreground/90 mb-3 text-center">
+                    <div className="text-sm font-bold uppercase tracking-wider text-white mb-3 text-center">
                       Try asking:
                     </div>
-                    <div className="relative h-16 overflow-hidden rounded-lg bg-gradient-to-r from-secondary/15 to-accent/15 border border-secondary/40 p-4">
+                    <div className="relative h-16 overflow-hidden rounded-lg bg-gradient-to-r from-secondary/30 to-accent/25 border border-secondary/60 p-4 shadow-lg">
                       {recommendedQuestions.map((q, idx) => (
                         <button
                           key={`${idx}-${q}`}
                           type="button"
-                          className={`absolute inset-0 p-4 text-sm text-center transition-all duration-500 cursor-pointer hover:bg-secondary/15 ${
+                          className={`absolute inset-0 p-4 text-sm text-center transition-all duration-500 cursor-pointer hover:bg-secondary/20 ${
                             idx === currentSuggestionIndex 
                               ? 'opacity-100 translate-y-0' 
                               : idx === (currentSuggestionIndex - 1 + recommendedQuestions.length) % recommendedQuestions.length
@@ -660,14 +596,14 @@ export default function ChatClient() {
                           onClick={() => handleAsk(q)}
                           aria-label={`Use recommended question: ${q}`}
                         >
-                          <span className="text-secondary font-semibold">{q}</span>
+                          <span className="text-white font-semibold drop-shadow-sm">{q}</span>
                         </button>
                       ))}
                     </div>
                     
                     {/* All suggestions grid */}
                     <div className="mt-4">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-foreground/90 mb-2 text-center">
+                      <div className="text-sm font-bold uppercase tracking-wider text-white mb-3 text-center">
                         Or choose from:
                       </div>
                       <div className="flex flex-wrap gap-2 justify-center">
@@ -675,7 +611,7 @@ export default function ChatClient() {
                           <button
                             key={`grid-${idx}-${q}`}
                             type="button"
-                            className="text-xs px-3 py-1.5 rounded-full bg-secondary/20 hover:bg-secondary/30 border border-secondary/40 hover:border-secondary/60 transition-all hover:scale-[1.02] cursor-pointer text-foreground font-medium"
+                            className="text-xs px-3 py-2 rounded-full bg-secondary/30 hover:bg-secondary/40 border border-secondary/60 hover:border-secondary/80 transition-all hover:scale-[1.02] cursor-pointer text-white font-semibold shadow-md"
                             onClick={() => handleAsk(q)}
                             aria-label={`Use recommended question: ${q}`}
                           >
@@ -863,7 +799,7 @@ export default function ChatClient() {
                                 >
                                   <span>Sources ({m.sources.length})</span>
                                   <svg 
-                                    className={`w-3 h-3 transition-transform ${collapsedSources.has(i) ? "" : "rotate-180"}`}
+                                    className={`w-3 h-3 flex-shrink-0 transition-transform ${collapsedSources.has(i) ? "" : "rotate-180"}`}
                                     fill="none" 
                                     stroke="currentColor" 
                                     viewBox="0 0 24 24"
@@ -872,19 +808,20 @@ export default function ChatClient() {
                                   </svg>
                                 </button>
                                 {!collapsedSources.has(i) && (
-                                  <div className="flex flex-wrap gap-2 animate-slide-down">
+                                  <div className="flex flex-col gap-2 animate-slide-down">
                                     {m.sources.map((s, idx) => (
                                       <a
                                         key={`${s.uri}-${idx}`}
-                                        className="text-xs px-2 py-1 rounded-md bg-secondary/20 hover:bg-secondary/30 border border-secondary/40 hover:border-secondary/60 transition-all text-white hover:text-white inline-flex items-center gap-1 font-medium"
+                                        className="text-xs px-2 py-1.5 rounded-md bg-secondary/20 hover:bg-secondary/30 border border-secondary/40 hover:border-secondary/60 transition-all text-white hover:text-white inline-flex items-start gap-1.5 font-medium min-w-0"
                                         href={s.uri}
                                         target="_blank"
                                         rel="noreferrer"
+                                        title={s.title || s.uri}
                                       >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-3 h-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                         </svg>
-                                        {s.title || s.uri}
+                                        <span className="line-clamp-2 break-words">{s.title || s.uri}</span>
                                       </a>
                                     ))}
                                   </div>
@@ -939,24 +876,6 @@ export default function ChatClient() {
             </div>
           </div>
           
-          {/* Scroll to bottom button */}
-          {showScrollButton && (
-            <button
-              onClick={scrollToBottom}
-              className="absolute bottom-32 right-6 bg-secondary text-white rounded-full p-3 shadow-lg hover:scale-[1.05] transition-all z-30 animate-bounce-subtle"
-              title="Scroll to bottom"
-              aria-label="Scroll to latest message"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-              </svg>
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-accent text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-          )}
           {featuredPages.length > 0 && (
             <div className="w-full slide-up flex-shrink-0">
               <div className="flex flex-wrap gap-1.5 px-0.5">

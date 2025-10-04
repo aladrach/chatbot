@@ -15,6 +15,14 @@ export interface ChatAnalytics {
   referrer?: string;
 }
 
+export interface BotLoad {
+  sessionId: string;
+  timestamp: Date;
+  userAgent?: string;
+  referrer?: string;
+  pageUrl?: string;
+}
+
 export async function trackChatInteraction(data: ChatAnalytics) {
   try {
     await query(
@@ -41,6 +49,25 @@ export async function trackChatInteraction(data: ChatAnalytics) {
   }
 }
 
+export async function trackBotLoad(data: BotLoad) {
+  try {
+    await query(
+      `INSERT INTO bot_loads 
+       (session_id, timestamp, user_agent, referrer, page_url)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        data.sessionId,
+        data.timestamp,
+        data.userAgent,
+        data.referrer,
+        data.pageUrl,
+      ]
+    );
+  } catch (error) {
+    console.error('Failed to track bot load:', error);
+  }
+}
+
 export async function getAnalyticsSummary(startDate?: Date, endDate?: Date) {
   const dateFilter = startDate && endDate
     ? `WHERE timestamp >= $1 AND timestamp <= $2`
@@ -49,6 +76,8 @@ export async function getAnalyticsSummary(startDate?: Date, endDate?: Date) {
 
   const [
     totalInteractions,
+    totalBotLoads,
+    uniqueInteractingSessions,
     avgResponseTime,
     errorRate,
     topQuestions,
@@ -59,6 +88,16 @@ export async function getAnalyticsSummary(startDate?: Date, endDate?: Date) {
     // Total interactions
     query(
       `SELECT COUNT(*) as count FROM chat_analytics ${dateFilter}`,
+      params
+    ),
+    // Total bot loads
+    query(
+      `SELECT COUNT(*) as count FROM bot_loads ${dateFilter}`,
+      params
+    ),
+    // Unique sessions that interacted (asked at least one question)
+    query(
+      `SELECT COUNT(DISTINCT session_id) as count FROM chat_analytics ${dateFilter}`,
       params
     ),
     // Average response time
@@ -116,8 +155,15 @@ export async function getAnalyticsSummary(startDate?: Date, endDate?: Date) {
     ),
   ]);
 
+  const totalLoads = parseInt(totalBotLoads.rows[0]?.count || '0');
+  const uniqueInteractions = parseInt(uniqueInteractingSessions.rows[0]?.count || '0');
+  const interactionRate = totalLoads > 0 ? (uniqueInteractions / totalLoads) * 100 : 0;
+
   return {
     totalInteractions: parseInt(totalInteractions.rows[0]?.count || '0'),
+    totalBotLoads: totalLoads,
+    uniqueInteractingSessions: uniqueInteractions,
+    interactionRate: interactionRate,
     avgResponseTime: parseFloat(avgResponseTime.rows[0]?.avg_time || '0'),
     errorRate: errorRate.rows[0]
       ? (errorRate.rows[0].errors / errorRate.rows[0].total) * 100

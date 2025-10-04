@@ -50,6 +50,10 @@ export default function ChatClient() {
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const [currentSuggestionIndex, setCurrentSuggestionIndex] = useState(0);
   const recognitionRef = useRef<any>(null);
+  
+  // Session tracking for analytics
+  const sessionIdRef = useRef<string>(`session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+  const hasTrackedLoadRef = useRef(false);
 
   function resolveScrollContainer(): HTMLElement | null {
     // If we already resolved a working scroll container and it's still in the DOM, reuse it
@@ -384,6 +388,24 @@ export default function ChatClient() {
     }
   }, [messages.length, recommendedQuestions.length]);
 
+  // Track bot load once on mount
+  useEffect(() => {
+    if (!hasTrackedLoadRef.current) {
+      hasTrackedLoadRef.current = true;
+      
+      // Track bot load for interaction rate calculation
+      fetch('/api/analytics/load', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionIdRef.current,
+          timestamp: Date.now(),
+          pageUrl: window.location.href,
+        }),
+      }).catch(err => console.error('Failed to track bot load:', err));
+    }
+  }, []);
+
   function extractProposedFollowUps(input: string): { cleanedText: string; followUps: string[] } {
     if (!input) {
       console.debug("extractProposedFollowUps: empty input");
@@ -473,7 +495,10 @@ export default function ChatClient() {
       const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: text }),
+        body: JSON.stringify({ 
+          query: text,
+          sessionId: sessionIdRef.current,
+        }),
       });
 
       if (!res.ok) {

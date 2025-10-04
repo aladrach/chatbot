@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 interface AnalyticsData {
   summary: {
     totalInteractions: number;
+    totalBotLoads: number;
+    uniqueInteractingSessions: number;
+    interactionRate: number;
     avgResponseTime: number;
     errorRate: number;
     topQuestions: Array<{ question: string; count: number }>;
@@ -243,15 +246,32 @@ export default function AnalyticsDashboard() {
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
-            <div className="text-white/70 text-sm font-medium mb-2">Total Interactions</div>
+            <div className="text-white/70 text-sm font-medium mb-2">Bot Loads</div>
+            <div className="text-3xl font-bold text-white">{data?.summary.totalBotLoads.toLocaleString()}</div>
+            <div className="text-white/50 text-xs mt-1">Total page impressions</div>
+          </div>
+          
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+            <div className="text-white/70 text-sm font-medium mb-2">Interaction Rate</div>
+            <div className="text-3xl font-bold text-white">{data?.summary.interactionRate.toFixed(1)}%</div>
+            <div className="text-white/50 text-xs mt-1">{data?.summary.uniqueInteractingSessions} / {data?.summary.totalBotLoads} engaged</div>
+          </div>
+          
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+            <div className="text-white/70 text-sm font-medium mb-2">Total Questions</div>
             <div className="text-3xl font-bold text-white">{data?.summary.totalInteractions.toLocaleString()}</div>
+            <div className="text-white/50 text-xs mt-1">All interactions</div>
           </div>
           
           <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
             <div className="text-white/70 text-sm font-medium mb-2">Avg Response Time</div>
             <div className="text-3xl font-bold text-white">{data?.summary.avgResponseTime.toFixed(0)}ms</div>
+            <div className="text-white/50 text-xs mt-1">Performance metric</div>
           </div>
-          
+        </div>
+
+        {/* Secondary Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
             <div className="text-white/70 text-sm font-medium mb-2">Error Rate</div>
             <div className="text-3xl font-bold text-white">{data?.summary.errorRate.toFixed(1)}%</div>
@@ -260,6 +280,12 @@ export default function AnalyticsDashboard() {
           <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
             <div className="text-white/70 text-sm font-medium mb-2">Avg Sources/Response</div>
             <div className="text-3xl font-bold text-white">{data?.summary.avgSourcesPerResponse.toFixed(1)}</div>
+          </div>
+          
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-6 border border-white/20">
+            <div className="text-white/70 text-sm font-medium mb-2">Unique Users</div>
+            <div className="text-3xl font-bold text-white">{data?.summary.uniqueInteractingSessions.toLocaleString()}</div>
+            <div className="text-white/50 text-xs mt-1">Who asked questions</div>
           </div>
         </div>
 

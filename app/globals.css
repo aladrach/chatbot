@@ -213,13 +213,13 @@
   .message-bubble-user {
     background: linear-gradient(
       135deg,
-      rgba(79, 70, 229, 0.18) 0%,
-      rgba(99, 102, 241, 0.15) 100%
+      rgba(79, 70, 229, 0.28) 0%,
+      rgba(99, 102, 241, 0.25) 100%
     );
-    border: 1px solid rgba(99, 102, 241, 0.35);
+    border: 1px solid rgba(99, 102, 241, 0.5);
     color: rgb(31, 41, 55);
     box-shadow: 
-      0 2px 8px rgba(79, 70, 229, 0.15),
+      0 2px 8px rgba(79, 70, 229, 0.2),
       0 1px 3px rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(10px);
   }
@@ -227,14 +227,14 @@
   .message-bubble-assistant {
     background: linear-gradient(
       135deg,
-      rgba(243, 244, 246, 0.6) 0%,
-      rgba(249, 250, 251, 0.4) 100%
+      rgba(243, 244, 246, 0.85) 0%,
+      rgba(249, 250, 251, 0.75) 100%
     );
-    border: 1px solid rgba(209, 213, 219, 0.4);
+    border: 1px solid rgba(209, 213, 219, 0.6);
     color: rgb(31, 41, 55);
     box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.06),
-      0 1px 2px rgba(0, 0, 0, 0.04);
+      0 1px 3px rgba(0, 0, 0, 0.08),
+      0 1px 2px rgba(0, 0, 0, 0.06);
     backdrop-filter: blur(8px);
   }
 
@@ -242,28 +242,28 @@
   .dark .message-bubble-user {
     background: linear-gradient(
       135deg,
-      rgba(79, 70, 229, 0.25) 0%,
-      rgba(99, 102, 241, 0.20) 100%
+      rgba(79, 70, 229, 0.45) 0%,
+      rgba(99, 102, 241, 0.35) 100%
     );
-    border: 1px solid rgba(99, 102, 241, 0.45);
-    color: rgb(243, 244, 246);
+    border: 1px solid rgba(99, 102, 241, 0.65);
+    color: rgb(255, 255, 255);
     box-shadow: 
-      0 2px 8px rgba(79, 70, 229, 0.2),
-      0 1px 3px rgba(0, 0, 0, 0.3);
+      0 2px 8px rgba(79, 70, 229, 0.3),
+      0 1px 3px rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(12px);
   }
   
   .dark .message-bubble-assistant {
     background: linear-gradient(
       135deg,
-      rgba(30, 27, 75, 0.6) 0%,
-      rgba(45, 42, 90, 0.5) 100%
+      rgba(40, 37, 85, 0.85) 0%,
+      rgba(55, 52, 100, 0.75) 100%
     );
-    border: 1px solid rgba(99, 102, 241, 0.25);
-    color: rgb(229, 231, 235);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    color: rgb(245, 245, 255);
     box-shadow: 
-      0 2px 8px rgba(0, 0, 0, 0.3),
-      0 1px 3px rgba(0, 0, 0, 0.2);
+      0 2px 8px rgba(0, 0, 0, 0.4),
+      0 1px 3px rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(12px);
   }
   

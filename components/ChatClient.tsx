@@ -466,7 +466,7 @@ export default function ChatClient() {
       const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: text }),
+        body: JSON.stringify({ query: text, stream: true }),
       });
 
       if (!res.ok) {
@@ -475,31 +475,161 @@ export default function ChatClient() {
         return;
       }
 
-      const json = await res.json().catch(() => null);
-      if (!json) {
-        setMessages((prev) => [...prev, { role: "assistant", content: "Invalid response from server." }]);
-        return;
-      }
+      const contentType = res.headers.get("content-type");
+      
+      // Handle streaming response
+      if (contentType?.includes("text/event-stream")) {
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        
+        if (!reader) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "No readable stream" }]);
+          return;
+        }
 
-      const parsed = parseApiPayload(json);
-      const assistantId = Date.now();
-      lastAssistantIdRef.current = assistantId;
-      pendingScrollToAssistantRef.current = true;
-      followModeRef.current = "manual"; // Prevent topAnchor mode from interfering
-      console.log("Setting assistant message with ID:", assistantId, "pendingScroll:", true);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant" as const,
-          content: parsed.content,
-          answerText: parsed.answerText,
-          sources: parsed.sources,
-          relatedQuestions: parsed.relatedQuestions,
-          raw: parsed.raw,
+        const assistantId = Date.now();
+        lastAssistantIdRef.current = assistantId;
+        
+        // Add initial empty assistant message
+        setMessages((prev) => [...prev, {
+          role: "assistant",
+          content: "",
+          streaming: true,
           id: assistantId,
-        } as any,
-      ]);
-      // Auto-scroll behavior always enabled
+        } as any]);
+        
+        let accumulated = "";
+        let buffer = "";
+        
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Process SSE format (data: {...}\n\n)
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || ""; // Keep incomplete line in buffer
+            
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6).trim();
+                if (data === "[DONE]") continue;
+                
+                try {
+                  const chunk = JSON.parse(data);
+                  
+                  // Handle different streaming formats from Vertex AI
+                  const text = chunk?.candidates?.[0]?.content?.parts?.[0]?.text || 
+                               chunk?.text || 
+                               chunk?.content || 
+                               "";
+                  
+                  if (text) {
+                    accumulated += text;
+                    
+                    // Update the message with accumulated content
+                    setMessages((prev) => 
+                      prev.map((msg) => 
+                        (msg as any).id === assistantId
+                          ? { ...msg, content: accumulated }
+                          : msg
+                      )
+                    );
+                  }
+                } catch (e) {
+                  console.warn("Failed to parse streaming chunk:", data, e);
+                }
+              }
+            }
+          }
+          
+          // Process any remaining buffer
+          if (buffer.startsWith("data: ")) {
+            const data = buffer.slice(6).trim();
+            try {
+              const chunk = JSON.parse(data);
+              const text = chunk?.candidates?.[0]?.content?.parts?.[0]?.text || 
+                           chunk?.text || 
+                           chunk?.content || 
+                           "";
+              if (text) {
+                accumulated += text;
+              }
+            } catch (e) {
+              console.warn("Failed to parse final chunk:", data, e);
+            }
+          }
+        } catch (streamError) {
+          console.error("Stream reading error:", streamError);
+          setMessages((prev) => 
+            prev.map((msg) => 
+              (msg as any).id === assistantId
+                ? { ...msg, content: accumulated || "Error reading stream", streaming: false }
+                : msg
+            )
+          );
+          return;
+        }
+        
+        // Parse final response to extract metadata (sources, related questions)
+        try {
+          const parsed = parseApiPayload({ answerText: accumulated });
+          pendingScrollToAssistantRef.current = true;
+          followModeRef.current = "manual";
+          
+          setMessages((prev) =>
+            prev.map((msg) =>
+              (msg as any).id === assistantId
+                ? {
+                    ...msg,
+                    content: parsed.content,
+                    answerText: parsed.answerText,
+                    sources: parsed.sources,
+                    relatedQuestions: parsed.relatedQuestions,
+                    streaming: false,
+                  }
+                : msg
+            )
+          );
+        } catch (parseError) {
+          console.error("Parse error:", parseError);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              (msg as any).id === assistantId
+                ? { ...msg, streaming: false }
+                : msg
+            )
+          );
+        }
+      } else {
+        // Fallback to non-streaming response
+        const json = await res.json().catch(() => null);
+        if (!json) {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Invalid response from server." }]);
+          return;
+        }
+
+        const parsed = parseApiPayload(json);
+        const assistantId = Date.now();
+        lastAssistantIdRef.current = assistantId;
+        pendingScrollToAssistantRef.current = true;
+        followModeRef.current = "manual";
+        console.log("Setting assistant message with ID:", assistantId, "pendingScroll:", true);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant" as const,
+            content: parsed.content,
+            answerText: parsed.answerText,
+            sources: parsed.sources,
+            relatedQuestions: parsed.relatedQuestions,
+            raw: parsed.raw,
+            id: assistantId,
+          } as any,
+        ]);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       setMessages((prev) => [...prev, { role: "assistant", content: `Error: ${msg}` }]);
@@ -574,7 +704,7 @@ export default function ChatClient() {
                 </p>
                 {recommendedQuestions.length > 0 && (
                   <div className="mt-5 w-full max-w-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wide mb-3 text-center opacity-70">Recommended questions</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide mb-3 text-center opacity-90">Recommended questions</div>
                     <div className="flex flex-col gap-2 items-center text-sm">
                       {recommendedQuestions.map((q, idx) => (
                         <button
@@ -682,7 +812,7 @@ export default function ChatClient() {
                           <div className="mt-4 pt-3 border-t border-current/20">
                             <button
                               type="button"
-                              className="w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wide mb-2 opacity-70 hover:opacity-100 transition-opacity cursor-pointer"
+                              className="w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wide mb-2 opacity-90 hover:opacity-100 transition-opacity cursor-pointer"
                               onClick={() => toggleSources(i)}
                               aria-expanded={expandedSources.has(i)}
                               aria-controls={`sources-${i}`}
@@ -715,7 +845,7 @@ export default function ChatClient() {
 
                         {isAssistant && "relatedQuestions" in m && m.relatedQuestions && m.relatedQuestions.length > 0 && (
                           <div className="mt-4 pt-3 border-t border-current/20">
-                            <div className="text-xs font-semibold uppercase tracking-wide mb-2 opacity-70">Suggested questions</div>
+                            <div className="text-xs font-semibold uppercase tracking-wide mb-2 opacity-90">Suggested questions</div>
                             <div className="flex flex-col gap-2 text-sm">
                               {m.relatedQuestions.map((q, idx) => (
                                 <button

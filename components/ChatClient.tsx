@@ -1,12 +1,14 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useEffect, useRef, useState, useLayoutEffect } from "react";
+import { useEffect, useRef, useState, useLayoutEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import PerfectScrollbar from "react-perfect-scrollbar";
 import "react-perfect-scrollbar/dist/css/styles.css";
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 // removed typing animation
 
@@ -19,8 +21,8 @@ type AssistantExtras = {
 };
 
 type ChatMessage =
-  | { role: "user"; content: string }
-  | ({ role: "assistant"; content: string } & AssistantExtras);
+  | { role: "user"; content: string; timestamp?: number }
+  | ({ role: "assistant"; content: string; timestamp?: number } & AssistantExtras);
 
 export default function ChatClient() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -41,6 +43,15 @@ export default function ChatClient() {
   const manualLockRef = useRef(false);
   const chatWrapperRef = useRef<HTMLDivElement | null>(null);
   const [faqsExpanded, setFaqsExpanded] = useState(false);
+  
+  // New state for enhancements
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+  const [collapsedSources, setCollapsedSources] = useState<Set<number>>(new Set());
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
+  const [currentSuggestionIndex, setCurrentSuggestionIndex] = useState(0);
+  const recognitionRef = useRef<any>(null);
 
   function resolveScrollContainer(): HTMLElement | null {
     // If we already resolved a working scroll container and it's still in the DOM, reuse it
@@ -250,6 +261,87 @@ export default function ChatClient() {
     };
   }
 
+  // Utility functions for new features
+  const formatTimestamp = (timestamp?: number) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const copyToClipboard = useCallback(async (text: string, messageId: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const container = resolveScrollContainer();
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      setShowScrollButton(false);
+      setUnreadCount(0);
+    }
+  }, []);
+
+  const clearConversation = useCallback(() => {
+    if (window.confirm('Clear all messages?')) {
+      setMessages([]);
+      setUnreadCount(0);
+      followModeRef.current = "bottom";
+    }
+  }, []);
+
+  const copyConversation = useCallback(async () => {
+    const text = messages.map(m => {
+      const role = m.role === 'user' ? 'You' : 'Assistant';
+      const time = formatTimestamp(m.timestamp);
+      return `${role} ${time ? `(${time})` : ''}:\n${m.content}\n`;
+    }).join('\n');
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Conversation copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy conversation:', err);
+    }
+  }, [messages]);
+
+  const toggleVoiceInput = useCallback(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Speech recognition is not supported in your browser.');
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => setIsListening(false);
+      recognition.onerror = () => setIsListening(false);
+      
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
+  }, [isListening]);
+
   // Fetch recommended questions from a lightweight cached endpoint
   useEffect(() => {
     let cancelled = false;
@@ -320,6 +412,41 @@ export default function ChatClient() {
       cancelled = true;
     };
   }, []);
+
+  // Monitor scroll position for scroll-to-bottom button
+  useEffect(() => {
+    const container = resolveScrollContainer();
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setShowScrollButton(!isNearBottom && messages.length > 3);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [messages.length]);
+
+  // Track unread messages when user is scrolled up
+  useEffect(() => {
+    if (showScrollButton && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === 'assistant') {
+        setUnreadCount(prev => prev + 1);
+      }
+    }
+  }, [messages.length, showScrollButton]);
+
+  // Cycle through suggestions in empty state
+  useEffect(() => {
+    if (messages.length === 0 && recommendedQuestions.length > 1) {
+      const interval = setInterval(() => {
+        setCurrentSuggestionIndex((prev) => (prev + 1) % recommendedQuestions.length);
+      }, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [messages.length, recommendedQuestions.length]);
 
   function extractProposedFollowUps(input: string): { cleanedText: string; followUps: string[] } {
     if (!input) {
@@ -404,7 +531,7 @@ export default function ChatClient() {
     pendingScrollToUserRef.current = true;
     manualLockRef.current = false;
     followModeRef.current = "topAnchor";
-    setMessages((prev) => [...prev, { role: "user", content: text, id } as any]);
+    setMessages((prev) => [...prev, { role: "user", content: text, timestamp: Date.now(), id } as any]);
     setInput("");
     try {
       const res = await fetch("/api/chat/stream", {
@@ -435,6 +562,7 @@ export default function ChatClient() {
           sources: parsed.sources,
           relatedQuestions: parsed.relatedQuestions,
           raw: parsed.raw,
+          timestamp: Date.now(),
         },
       ]);
       // Restore bottom follow unless user intervened
@@ -467,8 +595,11 @@ export default function ChatClient() {
 
   return (
     <div className="font-sans flex flex-col h-full w-full p-4 sm:p-4 relative embedded-chatbot" style={{background: 'rgba(16, 14, 37, .5)', border: '4px solid #42439A', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderRadius: '8px'}}>
-      <main className="flex flex-col gap-3 sm:gap-4 items-center sm:items-start w-full flex-1 min-h-0 relative z-10">
-        <div className="w-full flex flex-col gap-4 flex-1 min-h-0">
+      {/* Animated background */}
+      <div className="animated-background"></div>
+      
+      <main className="flex flex-col gap-2 sm:gap-3 items-center sm:items-start w-full flex-1 min-h-0 relative z-10">
+        <div className="w-full flex flex-col gap-2 flex-1 min-h-0">
           <div className="w-full flex-1 rounded-lg chat-container min-h-0">
             <div ref={chatWrapperRef} style={{ height: '100%', width: '100%', position: 'relative' }}>
               <PerfectScrollbar 
@@ -490,32 +621,68 @@ export default function ChatClient() {
               >
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full py-12 fade-in">
-                <div className="w-16 h-16 rounded-full bg-secondary/20 border-2 border-secondary/40 flex items-center justify-center mb-4">
-                  <svg className="w-8 h-8 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                {/* Floating animated icon */}
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-secondary/30 to-accent/30 border-2 border-secondary/50 flex items-center justify-center mb-6 animate-float shadow-lg">
+                  <svg className="w-10 h-10 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <p className="text-sm text-muted-foreground text-center">
+                
+                {/* Animated greeting */}
+                <h2 className="text-xl font-semibold text-foreground mb-2 animate-slide-down">
+                  Welcome to Incorta Assistant
+                </h2>
+                <p className="text-sm text-muted-foreground text-center mb-1 animate-slide-down delay-100">
                   Ask a question about Incorta docs to get started.
                 </p>
-                <p className="text-xs text-muted-foreground/70 text-center mt-2">
+                <p className="text-xs text-muted-foreground/70 text-center animate-slide-down delay-200">
                   I can help you find information, explain concepts, and answer questions about Incorta.
                 </p>
+                
+                {/* Cycling featured question */}
                 {recommendedQuestions.length > 0 && (
-                  <div className="mt-5 w-full max-w-xl">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 text-center">Recommended questions</div>
-                    <div className="flex flex-wrap gap-2 justify-center">
+                  <div className="mt-6 w-full max-w-xl animate-slide-down delay-300">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-foreground/90 mb-3 text-center">
+                      Try asking:
+                    </div>
+                    <div className="relative h-16 overflow-hidden rounded-lg bg-gradient-to-r from-secondary/15 to-accent/15 border border-secondary/40 p-4">
                       {recommendedQuestions.map((q, idx) => (
                         <button
                           key={`${idx}-${q}`}
                           type="button"
-                          className="text-xs underline hover:no-underline px-2 py-1 rounded-md related-question-btn text-left cursor-pointer"
+                          className={`absolute inset-0 p-4 text-sm text-center transition-all duration-500 cursor-pointer hover:bg-secondary/15 ${
+                            idx === currentSuggestionIndex 
+                              ? 'opacity-100 translate-y-0' 
+                              : idx === (currentSuggestionIndex - 1 + recommendedQuestions.length) % recommendedQuestions.length
+                              ? 'opacity-0 -translate-y-full'
+                              : 'opacity-0 translate-y-full'
+                          }`}
                           onClick={() => handleAsk(q)}
                           aria-label={`Use recommended question: ${q}`}
                         >
-                          {q}
+                          <span className="text-secondary font-semibold">{q}</span>
                         </button>
                       ))}
+                    </div>
+                    
+                    {/* All suggestions grid */}
+                    <div className="mt-4">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-foreground/90 mb-2 text-center">
+                        Or choose from:
+                      </div>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {recommendedQuestions.map((q, idx) => (
+                          <button
+                            key={`grid-${idx}-${q}`}
+                            type="button"
+                            className="text-xs px-3 py-1.5 rounded-full bg-secondary/20 hover:bg-secondary/30 border border-secondary/40 hover:border-secondary/60 transition-all hover:scale-[1.02] cursor-pointer text-foreground font-medium"
+                            onClick={() => handleAsk(q)}
+                            aria-label={`Use recommended question: ${q}`}
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -523,10 +690,10 @@ export default function ChatClient() {
             ) : (
               <>
               {recommendedQuestions.length > 0 && (
-                <div className="sticky top-0 z-20 mb-3 rounded-lg border border-border/50 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <div className="sticky top-0 z-20 mb-3 rounded-lg border border-border/50 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
                   <button
                     type="button"
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-foreground/90 hover:text-foreground transition-colors"
                     onClick={() => setFaqsExpanded((v) => !v)}
                     aria-expanded={faqsExpanded}
                     aria-controls="faqs-collapse"
@@ -543,7 +710,7 @@ export default function ChatClient() {
                           <button
                             key={`${idx}-${q}`}
                             type="button"
-                            className="text-xs underline hover:no-underline px-2 py-1 rounded-md related-question-btn text-left cursor-pointer"
+                            className="text-xs px-3 py-1.5 rounded-full bg-secondary/20 hover:bg-secondary/30 border border-secondary/40 hover:border-secondary/60 transition-all hover:scale-[1.02] cursor-pointer text-foreground font-medium"
                             onClick={() => handleAsk(q)}
                             aria-label={`Use FAQ: ${q}`}
                           >
@@ -555,7 +722,7 @@ export default function ChatClient() {
                   )}
                 </div>
               )}
-              <ul className="flex flex-col gap-3">
+              <ul className="flex flex-col">
                 {messages.map((m, i) => {
                   const isAssistant = m.role === "assistant";
                   const isStreaming = isAssistant && (m as any).streaming;
@@ -563,75 +730,188 @@ export default function ChatClient() {
                   const isJustSentUser = !isAssistant && (m as any).id && (m as any).id === lastSentUserIdRef.current;
                   const key = (m as any).id ?? `${m.role}-${i}`;
                   
+                  // Message grouping: reduce spacing if same sender as previous
+                  const prevMessage = i > 0 ? messages[i - 1] : null;
+                  const isGrouped = prevMessage && prevMessage.role === m.role;
+                  const gapClass = isGrouped ? "mt-1" : "mt-4";
+                  
+                  // Responsive width based on content length
+                  const contentLength = messageText.length;
+                  const widthClass = contentLength < 50 ? "max-w-[65%]" : contentLength < 150 ? "max-w-[75%]" : "max-w-[85%]";
+                  
                   return (
-                    <li key={key} className={`${isAssistant ? "flex justify-start" : "flex justify-end"} fade-in`}>
-                      <div
-                        className={
-                          isAssistant
-                            ? "max-w-[85%] rounded-2xl px-4 py-2 text-sm message-bubble-assistant"
-                            : "max-w-[85%] rounded-2xl px-4 py-2 text-sm message-bubble-user"
-                        }
-                        ref={isJustSentUser ? lastSentUserElementRef : undefined}
-                      >
-                        {isAssistant ? (
-                          <div className="prose prose-sm dark:prose-invert max-w-none fade-in">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm, remarkBreaks]}
-                              components={{
-                                p: (props: any) => <p className="mb-4 leading-7" {...props} />,
-                                ul: (props: any) => <ul className="list-disc ml-6 my-3 space-y-1" {...props} />,
-                                ol: (props: any) => <ol className="list-decimal ml-6 my-3 space-y-1" {...props} />,
-                                li: (props: any) => <li className="leading-7" {...props} />,
-                                h1: (props: any) => <h1 className="text-xl font-semibold mt-4 mb-2" {...props} />,
-                                h2: (props: any) => <h2 className="text-lg font-semibold mt-4 mb-2" {...props} />,
-                                h3: (props: any) => <h3 className="text-base font-semibold mt-4 mb-2" {...props} />,
-                                a: (props: any) => <a className="underline hover:no-underline" target="_blank" rel="noreferrer" {...props} />,
-                                code: (props: any) => <code className="bg-black/5 dark:bg-white/10 px-1 py-0.5 rounded" {...props} />,
-                              }}
-                            >
-                              {messageText}
-                            </ReactMarkdown>
-                          </div>
-                        ) : (
-                          <span className="whitespace-pre-wrap break-words">{messageText}</span>
-                        )}
-
-                        {isAssistant && "sources" in m && m.sources && m.sources.length > 0 && (
-                          <div className="mt-3">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Sources</div>
-                            <div className="flex flex-wrap gap-2">
-                              {m.sources.map((s, idx) => (
-                                <a
-                                  key={`${s.uri}-${idx}`}
-                                  className="text-xs underline hover:no-underline px-2 py-1 rounded-md source-link"
-                                  href={s.uri}
-                                  target="_blank"
-                                  rel="noreferrer"
+                    <li key={key} className={`${isAssistant ? "flex justify-start" : "flex justify-end"} ${gapClass} message-item`}>
+                      <div className={`flex ${isAssistant ? "flex-row" : "flex-row-reverse"} gap-2 items-end ${widthClass}`}>
+                        {/* Avatar */}
+                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                          isAssistant 
+                            ? "bg-gradient-to-br from-secondary/30 to-accent/30 border border-secondary/50" 
+                            : "bg-gradient-to-br from-accent/30 to-secondary/30 border border-accent/50"
+                        } ${isGrouped ? "opacity-0" : "opacity-100"}`}>
+                          {isAssistant ? (
+                            <svg className="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          )}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className={`group relative rounded-2xl px-4 py-3 text-sm ${
+                              isAssistant
+                                ? "message-bubble-assistant"
+                                : "message-bubble-user"
+                            }`}
+                            ref={isJustSentUser ? lastSentUserElementRef : undefined}
+                          >
+                            {/* Copy button (appears on hover for assistant messages) */}
+                            {isAssistant && (
+                              <button
+                                onClick={() => copyToClipboard(messageText, key as any)}
+                                className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-all bg-secondary text-white rounded-full p-1.5 shadow-lg hover:scale-[1.05] transform"
+                                title="Copy message"
+                                aria-label="Copy message to clipboard"
+                              >
+                                {copiedMessageId === key ? (
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
+                            
+                            {/* Message content */}
+                            {isAssistant ? (
+                              <div className="prose prose-sm dark:prose-invert max-w-none">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                                  components={{
+                                    p: (props: any) => <p className="mb-4 leading-7" {...props} />,
+                                    ul: (props: any) => <ul className="list-disc ml-6 my-3 space-y-1" {...props} />,
+                                    ol: (props: any) => <ol className="list-decimal ml-6 my-3 space-y-1" {...props} />,
+                                    li: (props: any) => <li className="leading-7" {...props} />,
+                                    h1: (props: any) => <h1 className="text-xl font-semibold mt-4 mb-2" {...props} />,
+                                    h2: (props: any) => <h2 className="text-lg font-semibold mt-4 mb-2" {...props} />,
+                                    h3: (props: any) => <h3 className="text-base font-semibold mt-4 mb-2" {...props} />,
+                                    a: (props: any) => <a className="text-secondary hover:underline" target="_blank" rel="noreferrer" {...props} />,
+                                    code: ({node, inline, className, children, ...props}: any) => {
+                                      const match = /language-(\w+)/.exec(className || '');
+                                      return !inline && match ? (
+                                        <SyntaxHighlighter
+                                          style={vscDarkPlus}
+                                          language={match[1]}
+                                          PreTag="div"
+                                          className="rounded-lg my-3"
+                                          {...props}
+                                        >
+                                          {String(children).replace(/\n$/, '')}
+                                        </SyntaxHighlighter>
+                                      ) : (
+                                        <code className="bg-black/10 dark:bg-white/10 px-1.5 py-0.5 rounded text-sm" {...props}>
+                                          {children}
+                                        </code>
+                                      );
+                                    },
+                                    table: (props: any) => (
+                                      <div className="overflow-x-auto my-4">
+                                        <table className="min-w-full divide-y divide-border" {...props} />
+                                      </div>
+                                    ),
+                                    th: (props: any) => <th className="px-3 py-2 bg-muted text-left text-xs font-semibold" {...props} />,
+                                    td: (props: any) => <td className="px-3 py-2 text-sm" {...props} />,
+                                    blockquote: (props: any) => (
+                                      <blockquote className="border-l-4 border-secondary pl-4 italic my-4 text-muted-foreground" {...props} />
+                                    ),
+                                  }}
                                 >
-                                  {s.title || s.uri}
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                                  {messageText}
+                                </ReactMarkdown>
+                              </div>
+                            ) : (
+                              <span className="whitespace-pre-wrap break-words">{messageText}</span>
+                            )}
+                            
+                            {/* Timestamp */}
+                            {!isGrouped && m.timestamp && (
+                              <div className={`text-xs text-muted-foreground/80 mt-2 ${isAssistant ? "text-left" : "text-right"}`}>
+                                {formatTimestamp(m.timestamp)}
+                              </div>
+                            )}
 
-                        {isAssistant && "relatedQuestions" in m && m.relatedQuestions && m.relatedQuestions.length > 0 && (
-                          <div className="mt-3">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Suggested questions</div>
-                            <div className="flex flex-wrap gap-2">
-                              {m.relatedQuestions.map((q, idx) => (
+                            {/* Collapsible Sources */}
+                            {isAssistant && "sources" in m && m.sources && m.sources.length > 0 && (
+                              <div className="mt-4 border-t border-border/50 pt-3">
                                 <button
-                                  key={`${idx}-${q}`}
-                                  type="button"
-                                  className="text-xs underline hover:no-underline px-2 py-1 rounded-md related-question-btn text-left cursor-pointer"
-                                  onClick={() => handleAsk(q)}
+                                  onClick={() => {
+                                    const newCollapsed = new Set(collapsedSources);
+                                    if (newCollapsed.has(i)) {
+                                      newCollapsed.delete(i);
+                                    } else {
+                                      newCollapsed.add(i);
+                                    }
+                                    setCollapsedSources(newCollapsed);
+                                  }}
+                                  className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white hover:text-white/80 transition-colors mb-2"
                                 >
-                                  {q}
+                                  <span>Sources ({m.sources.length})</span>
+                                  <svg 
+                                    className={`w-3 h-3 transition-transform ${collapsedSources.has(i) ? "" : "rotate-180"}`}
+                                    fill="none" 
+                                    stroke="currentColor" 
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
                                 </button>
-                              ))}
-                            </div>
+                                {!collapsedSources.has(i) && (
+                                  <div className="flex flex-wrap gap-2 animate-slide-down">
+                                    {m.sources.map((s, idx) => (
+                                      <a
+                                        key={`${s.uri}-${idx}`}
+                                        className="text-xs px-2 py-1 rounded-md bg-secondary/20 hover:bg-secondary/30 border border-secondary/40 hover:border-secondary/60 transition-all text-white hover:text-white inline-flex items-center gap-1 font-medium"
+                                        href={s.uri}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                        {s.title || s.uri}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Related Questions */}
+                            {isAssistant && "relatedQuestions" in m && m.relatedQuestions && m.relatedQuestions.length > 0 && (
+                              <div className="mt-4 border-t border-border/50 pt-3">
+                                <div className="text-xs font-semibold uppercase tracking-wide text-foreground/90 mb-2 text-left">Suggested questions</div>
+                                <div className="flex flex-wrap gap-2 justify-start">
+                                  {m.relatedQuestions.map((q, idx) => (
+                                    <button
+                                      key={`${idx}-${q}`}
+                                      type="button"
+                                      className="text-xs px-3 py-1.5 rounded-full bg-secondary/20 hover:bg-secondary/30 border border-secondary/40 hover:border-secondary/60 transition-all hover:scale-[1.02] cursor-pointer text-foreground font-medium text-left"
+                                      onClick={() => handleAsk(q)}
+                                    >
+                                      {q}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </div>
                     </li>
                   );
@@ -641,28 +921,52 @@ export default function ChatClient() {
               </>
             )}
             {isStreaming && (
-              <div className="mt-2 ml-1 flex items-center gap-2 text-xs text-muted-foreground typing-indicator slide-up">
-                <span className="inline-flex gap-1">
-                  <span className="inline-block size-1.5 rounded-full bg-current animate-bounce [animation-delay:0ms]" />
-                  <span className="inline-block size-1.5 rounded-full bg-current animate-bounce [animation-delay:120ms]" />
-                  <span className="inline-block size-1.5 rounded-full bg-current animate-bounce [animation-delay:240ms]" />
-                </span>
-                <span className="text-muted-foreground/80">Generating response...</span>
+              <div className="mt-4 ml-10 flex items-center gap-3 p-3 rounded-lg bg-secondary/10 border border-secondary/20 slide-up max-w-xs">
+                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-secondary/40 to-accent/40">
+                  <span className="inline-flex gap-0.5">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-secondary animate-bounce [animation-delay:0ms]" />
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-secondary animate-bounce [animation-delay:120ms]" />
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-secondary animate-bounce [animation-delay:240ms]" />
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-foreground">AI is thinking</span>
+                  <span className="text-xs text-muted-foreground/80">Analyzing your question...</span>
+                </div>
               </div>
             )}
             </PerfectScrollbar>
             </div>
           </div>
+          
+          {/* Scroll to bottom button */}
+          {showScrollButton && (
+            <button
+              onClick={scrollToBottom}
+              className="absolute bottom-32 right-6 bg-secondary text-white rounded-full p-3 shadow-lg hover:scale-[1.05] transition-all z-30 animate-bounce-subtle"
+              title="Scroll to bottom"
+              aria-label="Scroll to latest message"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-accent text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+          )}
           {featuredPages.length > 0 && (
             <div className="w-full slide-up flex-shrink-0">
-              <div className="flex flex-wrap gap-2 px-1 pb-1">
+              <div className="flex flex-wrap gap-1.5 px-0.5">
                 {featuredPages.map((item, idx) => (
                   <a
                     key={`${idx}-${item.url}`}
                     href={item.url}
                     target="_parent"
                     rel="noreferrer noopener"
-                    className="text-xs px-3 py-1 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
+                    className="text-xs px-2.5 py-0.5 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
                     style={{background: 'rgba(0, 160, 152, 0.2)', border: '1px solid rgba(0, 160, 152, 0.4)', color: 'rgb(0, 160, 152)'}}
                   >
                     {item.name}
@@ -679,7 +983,7 @@ export default function ChatClient() {
                   href={item.url}
                   target="_parent"
                   rel="noreferrer noopener"
-                  className="block w-full text-center px-4 py-3 rounded-md hover:opacity-90 transition-all font-semibold"
+                  className="block w-full text-center px-4 py-2 rounded-md hover:opacity-90 transition-all font-semibold text-sm"
                   style={{background: 'linear-gradient(135deg, rgb(72, 84, 254) 0%, rgb(72, 84, 254) 100%)', color: 'white', border: 'none'}}
                 >
                   {item.name}
@@ -687,21 +991,21 @@ export default function ChatClient() {
               ))}
             </div>
           )}
-          <div className="flex w-full items-center gap-2 slide-up flex-shrink-0">
+          <div className="flex w-full items-center gap-2 slide-up flex-shrink-0 p-1.5 rounded-xl bg-gradient-to-r from-white/10 to-white/5 border-2 border-secondary/40 shadow-xl input-area backdrop-blur-sm">
             <Input
               placeholder="Type your question and press Enter"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isLoading}
-              className="flex-1"
+              className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/60 focus-visible:ring-2 focus-visible:ring-secondary focus-visible:bg-white/15 transition-all"
             />
             <Button 
               type="button" 
               onClick={() => sendMessage()} 
               disabled={isLoading || !input.trim()} 
-              className="flex-shrink-0"
-              style={{background: 'linear-gradient(135deg, rgb(72, 84, 254) 0%, rgb(72, 84, 254) 100%)', border: 'none'}}
+              className="flex-shrink-0 button-press px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{background: 'linear-gradient(135deg, rgb(72, 84, 254) 0%, rgb(90, 100, 255) 100%)', border: 'none'}}
             >
               {isLoading ? (
                 <span className="inline-flex items-center gap-2">
@@ -709,7 +1013,12 @@ export default function ChatClient() {
                   <span className="hidden sm:inline">Sending</span>
                 </span>
               ) : (
-                "Send"
+                <>
+                  <span className="hidden sm:inline">Send</span>
+                  <svg className="w-5 h-5 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </>
               )}
             </Button>
           </div>

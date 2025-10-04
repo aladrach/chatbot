@@ -247,13 +247,13 @@
 
   /* Dark mode message bubbles */
   .dark .message-bubble-user {
-    /* Incorta Purple gradient for user messages */
+    /* Incorta Purple gradient for user messages - enhanced contrast */
     background: linear-gradient(
       135deg,
-      rgba(72, 84, 254, 0.45) 0%,
-      rgba(72, 84, 254, 0.30) 100%
+      rgba(72, 84, 254, 0.65) 0%,
+      rgba(72, 84, 254, 0.50) 100%
     );
-    border: 1px solid rgba(72, 84, 254, 0.65);
+    border: 1px solid rgba(72, 84, 254, 0.8);
     color: rgb(255, 255, 255);
     box-shadow: 
       0 2px 8px rgba(72, 84, 254, 0.3),
@@ -262,14 +262,14 @@
   }
   
   .dark .message-bubble-assistant {
-    /* Incorta Dark Blue gradient for assistant messages */
+    /* Incorta Dark Blue gradient for assistant messages - enhanced contrast */
     background: linear-gradient(
       135deg,
-      rgba(36, 28, 85, 0.85) 0%,
-      rgba(36, 28, 85, 0.75) 100%
+      rgba(36, 28, 85, 0.95) 0%,
+      rgba(36, 28, 85, 0.90) 100%
     );
-    border: 1px solid rgba(72, 84, 254, 0.4);
-    color: rgb(245, 245, 255);
+    border: 1px solid rgba(72, 84, 254, 0.5);
+    color: rgb(255, 255, 255);
     box-shadow: 
       0 2px 8px rgba(0, 0, 0, 0.4),
       0 1px 3px rgba(0, 0, 0, 0.3);
@@ -277,72 +277,75 @@
   }
   
   .source-link {
-    /* Incorta Purple for links */
+    /* Incorta Purple for links - enhanced contrast */
     color: rgb(72, 84, 254);
     text-decoration: underline;
-    text-decoration-color: rgba(72, 84, 254, 0.3);
+    text-decoration-color: rgba(72, 84, 254, 0.4);
     text-underline-offset: 2px;
     transition: all 0.2s ease;
+    font-weight: 500;
   }
   
   .source-link:hover {
-    color: rgb(72, 84, 254);
-    text-decoration-color: rgba(72, 84, 254, 0.6);
-    opacity: 0.9;
+    color: rgb(90, 100, 255);
+    text-decoration-color: rgba(72, 84, 254, 0.8);
   }
   
   .related-question-btn {
     color: inherit;
-    opacity: 0.8;
+    opacity: 0.9;
     border-bottom: 1px solid currentColor;
-    border-color: rgba(156, 163, 175, 0.3);
+    border-color: rgba(156, 163, 175, 0.4);
     transition: all 0.2s ease;
     padding-bottom: 1px;
+    font-weight: 500;
   }
   
   .related-question-btn:hover {
     opacity: 1;
     /* Incorta Purple for hover */
-    border-color: rgba(72, 84, 254, 0.6);
+    border-color: rgba(72, 84, 254, 0.8);
     color: rgb(72, 84, 254);
   }
 
-  /* Dark mode source links and buttons */
+  /* Dark mode source links and buttons - enhanced contrast */
   .dark .source-link {
-    /* Incorta Purple for dark mode links */
-    color: rgb(72, 84, 254);
-    text-decoration-color: rgba(72, 84, 254, 0.3);
+    /* Brighter purple for dark mode links */
+    color: rgb(140, 150, 255);
+    text-decoration-color: rgba(140, 150, 255, 0.5);
   }
   
   .dark .source-link:hover {
-    color: rgb(72, 84, 254);
-    text-decoration-color: rgba(72, 84, 254, 0.6);
-    opacity: 0.9;
+    color: rgb(160, 170, 255);
+    text-decoration-color: rgba(140, 150, 255, 0.8);
   }
   
   .dark .related-question-btn {
-    opacity: 0.75;
-    border-color: rgba(203, 213, 225, 0.25);
+    color: rgb(230, 235, 255);
+    opacity: 0.95;
+    border-color: rgba(230, 235, 255, 0.4);
   }
   
   .dark .related-question-btn:hover {
     opacity: 1;
-    /* Incorta Purple for dark mode hover */
-    border-color: rgba(72, 84, 254, 0.6);
-    color: rgb(72, 84, 254);
+    /* Brighter purple for dark mode hover */
+    border-color: rgba(140, 150, 255, 0.8);
+    color: rgb(160, 170, 255);
   }
   
-  /* FAQ container question button overrides */
+  /* FAQ container question button overrides - enhanced contrast */
   .faq-container .related-question-btn {
-    opacity: 0.9;
-    border-color: rgba(255, 255, 255, 0.3);
-    color: white;
+    opacity: 1;
+    border-color: rgba(255, 255, 255, 0.5);
+    color: rgb(255, 255, 255);
+    font-weight: 500;
   }
   
   .faq-container .related-question-btn:hover {
     opacity: 1;
-    border-color: rgba(255, 255, 255, 0.6);
-    color: white;
+    border-color: rgba(255, 255, 255, 0.8);
+    color: rgb(255, 255, 255);
+    background: rgba(255, 255, 255, 0.1);
   }
   
   .typing-indicator {
@@ -371,6 +374,70 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+  
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+  
+  @keyframes backgroundPulse {
+    0%, 100% { 
+      opacity: 0.3; 
+      transform: scale(1);
+    }
+    50% { 
+      opacity: 0.6; 
+      transform: scale(1.02);
+    }
+  }
+  
+  @keyframes bounceSubtle {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+  
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+  
+  .animate-slide-down {
+    animation: slideDown 0.5s ease-out;
+  }
+  
+  .animate-bounce-subtle {
+    animation: bounceSubtle 2s ease-in-out infinite;
+  }
+  
+  .delay-100 {
+    animation-delay: 0.1s;
+  }
+  
+  .delay-200 {
+    animation-delay: 0.2s;
+  }
+  
+  .delay-300 {
+    animation-delay: 0.3s;
   }
   
   @keyframes slideInFromTop {
@@ -466,5 +533,155 @@
       padding: 0.5rem;
       font-size: 0.8125rem;
     }
+  }
+  
+  /* Animated background */
+  .animated-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 20% 50%, rgba(72, 84, 254, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 160, 152, 0.08) 0%, transparent 50%);
+    animation: backgroundPulse 8s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+  
+  /* Quick action buttons - enhanced contrast */
+  .quick-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.95);
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+  }
+  
+  .quick-action-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: rgb(255, 255, 255);
+    transform: scale(1.02);
+  }
+  
+  .quick-action-btn:active {
+    transform: scale(0.98);
+  }
+  
+  /* Message item stagger animation */
+  .message-item {
+    animation: fadeIn 0.4s ease-out;
+  }
+  
+  .message-item:nth-child(1) { animation-delay: 0s; }
+  .message-item:nth-child(2) { animation-delay: 0.05s; }
+  .message-item:nth-child(3) { animation-delay: 0.1s; }
+  .message-item:nth-child(4) { animation-delay: 0.15s; }
+  .message-item:nth-child(5) { animation-delay: 0.2s; }
+  
+  /* Button press animation */
+  .button-press {
+    transition: all 0.2s ease;
+  }
+  
+  .button-press:hover:not(:disabled) {
+    transform: translateY(-1px) scale(1.01);
+    box-shadow: 
+      0 6px 20px rgba(72, 84, 254, 0.5),
+      0 3px 10px rgba(72, 84, 254, 0.3);
+    filter: brightness(1.05);
+  }
+  
+  .button-press:active:not(:disabled) {
+    transform: translateY(0) scale(0.99);
+    box-shadow: 0 2px 8px rgba(72, 84, 254, 0.4);
+  }
+  
+  /* Input area glow effect */
+  .input-area {
+    transition: all 0.3s ease;
+  }
+  
+  .input-area:focus-within {
+    border-color: rgba(72, 84, 254, 0.7);
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+    box-shadow: 
+      0 0 0 3px rgba(72, 84, 254, 0.15),
+      0 4px 20px rgba(72, 84, 254, 0.3),
+      0 8px 32px rgba(72, 84, 254, 0.15);
+  }
+  
+  /* Chat input field specific styles */
+  .input-area input {
+    font-size: 0.875rem;
+    line-height: 1.4;
+    min-height: 2.25rem;
+  }
+  
+  .input-area input::placeholder {
+    font-weight: 400;
+  }
+  
+  .input-area input:focus {
+    outline: none;
+    box-shadow: none;
+  }
+  
+  /* Enhanced input hover state */
+  .input-area input:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.13);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+  
+  /* Enhanced message bubbles with hover effects */
+  .message-bubble-user,
+  .message-bubble-assistant {
+    transition: all 0.2s ease;
+  }
+  
+  .message-bubble-assistant:hover {
+    transform: translateX(2px);
+    box-shadow: 
+      0 4px 12px rgba(0, 0, 0, 0.15),
+      0 2px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .message-bubble-user:hover {
+    transform: translateX(-2px);
+    box-shadow: 
+      0 4px 12px rgba(72, 84, 254, 0.3),
+      0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+  
+  /* Dark mode enhancements */
+  .dark .message-bubble-assistant:hover {
+    box-shadow: 
+      0 4px 16px rgba(0, 0, 0, 0.5),
+      0 2px 8px rgba(72, 84, 254, 0.2);
+  }
+  
+  .dark .message-bubble-user:hover {
+    box-shadow: 
+      0 4px 12px rgba(72, 84, 254, 0.4),
+      0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Syntax highlighter theme adjustments */
+  .message-bubble-assistant pre {
+    margin: 0.75rem 0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+  
+  .message-bubble-assistant pre code {
+    background: transparent !important;
+    padding: 0 !important;
   }
 }

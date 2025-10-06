@@ -82,6 +82,23 @@ export async function POST(request: NextRequest) {
     const sourcesInput: any[] | undefined = answerNode?.references ?? json?.references;
     const answerSkippedReasons: string[] | undefined = answerNode?.answerSkippedReasons;
     
+    // Parse sources from references
+    const sources: Array<{ title?: string; uri: string }> = [];
+    if (Array.isArray(sourcesInput)) {
+      const sourcesMap = new Map<string, { title?: string; uri: string }>();
+      for (const ref of sourcesInput) {
+        const uri: string | undefined = ref?.chunkInfo?.documentMetadata?.uri;
+        const title: string | undefined = ref?.chunkInfo?.documentMetadata?.title;
+        if (uri) {
+          const key = uri;
+          if (!sourcesMap.has(key)) {
+            sourcesMap.set(key, { title, uri });
+          }
+        }
+      }
+      sources.push(...Array.from(sourcesMap.values()));
+    }
+    
     // Check if this is an unanswered question (out of domain or no results)
     const isUnanswered = Array.isArray(answerSkippedReasons) && answerSkippedReasons.length > 0;
     const skipReason = isUnanswered ? answerSkippedReasons[0] : undefined;
@@ -96,8 +113,10 @@ export async function POST(request: NextRequest) {
       hasError: false,
       isUnanswered,
       skipReason,
-      sourcesCount: Array.isArray(sourcesInput) ? sourcesInput.length : 0,
+      sourcesCount: sources.length,
       relatedQuestionsCount: Array.isArray(relatedQuestions) ? relatedQuestions.length : 0,
+      sources,
+      relatedQuestions,
       userAgent: request.headers.get('user-agent') || undefined,
       referrer: request.headers.get('referer') || undefined,
     });

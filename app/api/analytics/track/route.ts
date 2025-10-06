@@ -19,6 +19,8 @@ export async function POST(request: NextRequest) {
       skipReason: body.skipReason,
       sourcesCount: body.sourcesCount,
       relatedQuestionsCount: body.relatedQuestionsCount,
+      sources: body.sources,
+      relatedQuestions: body.relatedQuestions,
       userAgent: request.headers.get('user-agent') || undefined,
       referrer: request.headers.get('referer') || undefined,
     });

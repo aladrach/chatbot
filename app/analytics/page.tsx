@@ -20,17 +20,21 @@ interface AnalyticsData {
 }
 
 interface QuestionDetail {
-  id: number;
-  session_id: string;
-  question: string;
   answer: string | null;
-  timestamp: string;
-  response_time: number;
   has_error: boolean;
   is_unanswered: boolean;
   skip_reason: string | null;
   sources_count: number;
   related_questions_count: number;
+  sources: Array<{ title?: string; uri: string }>;
+  related_questions: string[];
+  count: number;
+  timestamps: string[];
+  session_ids: string[];
+  response_times: number[];
+  first_seen: string;
+  last_seen: string;
+  avg_response_time: number | null;
 }
 
 // Cookie helpers
@@ -489,21 +493,18 @@ export default function AnalyticsDashboard() {
               ) : questionDetails && questionDetails.length > 0 ? (
                 <div className="space-y-4">
                   <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <div className="text-white/70 text-sm font-medium mb-2">Total Occurrences</div>
+                    <div className="text-white/70 text-sm font-medium mb-2">Unique Responses</div>
                     <div className="text-3xl font-bold text-white">{questionDetails.length}</div>
                   </div>
 
                   <div className="space-y-4">
-                    <h4 className="text-lg font-semibold text-white">All Responses ({questionDetails.length})</h4>
+                    <h4 className="text-lg font-semibold text-white">All Response Variants ({questionDetails.length})</h4>
                     {questionDetails.map((detail, idx) => (
-                      <div key={detail.id} className="bg-white/5 rounded-lg p-4 border border-white/10 space-y-3">
+                      <div key={idx} className="bg-white/5 rounded-lg p-4 border border-white/10 space-y-3">
                         {/* Response Header */}
                         <div className="flex flex-wrap gap-3 items-center text-xs">
-                          <span className="text-white/60">
-                            #{questionDetails.length - idx}
-                          </span>
-                          <span className="text-white/60">
-                            {new Date(detail.timestamp).toLocaleString()}
+                          <span className="text-white font-semibold">
+                            Given {detail.count}x
                           </span>
                           <span className={`px-2 py-1 rounded-full font-medium ${
                             detail.has_error 
@@ -514,21 +515,18 @@ export default function AnalyticsDashboard() {
                           }`}>
                             {detail.has_error ? 'Error' : detail.is_unanswered ? 'Unanswered' : 'Answered'}
                           </span>
-                          {detail.response_time && (
+                          {detail.avg_response_time && (
                             <span className="text-white/60">
-                              {detail.response_time}ms
+                              Avg: {detail.avg_response_time}ms
                             </span>
                           )}
-                          {detail.sources_count > 0 && (
-                            <span className="text-purple-300">
-                              {detail.sources_count} sources
-                            </span>
-                          )}
-                          {detail.related_questions_count > 0 && (
-                            <span className="text-blue-300">
-                              {detail.related_questions_count} related
-                            </span>
-                          )}
+                        </div>
+
+                        {/* Timestamps */}
+                        <div className="flex flex-wrap gap-2 text-xs text-white/50">
+                          <span>First: {new Date(detail.first_seen).toLocaleString()}</span>
+                          <span>•</span>
+                          <span>Last: {new Date(detail.last_seen).toLocaleString()}</span>
                         </div>
 
                         {/* Answer or Skip Reason */}
@@ -548,10 +546,60 @@ export default function AnalyticsDashboard() {
                           <div className="text-white/50 text-sm italic">No answer recorded</div>
                         )}
 
-                        {/* Session ID */}
-                        <div className="text-xs text-white/40">
-                          Session: {detail.session_id}
-                        </div>
+                        {/* Sources */}
+                        {detail.sources && detail.sources.length > 0 && (
+                          <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+                            <div className="text-purple-300 text-xs font-semibold uppercase mb-2">
+                              Sources ({detail.sources.length})
+                            </div>
+                            <div className="space-y-1.5">
+                              {detail.sources.map((source, sIdx) => (
+                                <a
+                                  key={sIdx}
+                                  href={source.uri}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-start gap-2 text-xs text-purple-200 hover:text-purple-100 hover:bg-purple-500/10 p-1.5 rounded transition-colors"
+                                >
+                                  <svg className="w-3 h-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                  <span className="flex-1 break-words">{source.title || source.uri}</span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Related Questions */}
+                        {detail.related_questions && detail.related_questions.length > 0 && (
+                          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                            <div className="text-blue-300 text-xs font-semibold uppercase mb-2">
+                              Related Questions ({detail.related_questions.length})
+                            </div>
+                            <div className="space-y-1.5">
+                              {detail.related_questions.map((rq, rqIdx) => (
+                                <div key={rqIdx} className="text-xs text-blue-200 pl-3 border-l-2 border-blue-500/50">
+                                  {rq}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Session IDs (collapsed, show count) */}
+                        <details className="text-xs text-white/40">
+                          <summary className="cursor-pointer hover:text-white/60">
+                            {detail.count} session{detail.count > 1 ? 's' : ''} (click to expand)
+                          </summary>
+                          <div className="mt-2 space-y-1 pl-3">
+                            {detail.session_ids.map((sid, sidIdx) => (
+                              <div key={sidIdx}>
+                                {sid} - {new Date(detail.timestamps[sidIdx]).toLocaleString()}
+                              </div>
+                            ))}
+                          </div>
+                        </details>
                       </div>
                     ))}
                   </div>

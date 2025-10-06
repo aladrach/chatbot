@@ -11,6 +11,8 @@ export interface ChatAnalytics {
   skipReason?: string;
   sourcesCount?: number;
   relatedQuestionsCount?: number;
+  sources?: Array<{ title?: string; uri: string }>;
+  relatedQuestions?: string[];
   userAgent?: string;
   referrer?: string;
 }
@@ -27,8 +29,8 @@ export async function trackChatInteraction(data: ChatAnalytics) {
   try {
     await query(
       `INSERT INTO chat_analytics 
-       (session_id, question, answer, timestamp, response_time, has_error, is_unanswered, skip_reason, sources_count, related_questions_count, user_agent, referrer)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+       (session_id, question, answer, timestamp, response_time, has_error, is_unanswered, skip_reason, sources_count, related_questions_count, sources, related_questions, user_agent, referrer)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         data.sessionId,
         data.question,
@@ -40,6 +42,8 @@ export async function trackChatInteraction(data: ChatAnalytics) {
         data.skipReason,
         data.sourcesCount || 0,
         data.relatedQuestionsCount || 0,
+        JSON.stringify(data.sources || []),
+        JSON.stringify(data.relatedQuestions || []),
         data.userAgent,
         data.referrer,
       ]

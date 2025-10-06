@@ -10,7 +10,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const queryText = (body?.query as string) || "";
-    const streamMode = (body?.stream as boolean) !== false; // Default to streaming
     const sessionId = body?.sessionId || request.headers.get('x-session-id') || `session-${Date.now()}`;
     
     if (!queryText) {
@@ -21,18 +20,19 @@ export async function POST(request: NextRequest) {
     }
 
     const url = "https://vertex-ai-backend-659680475186.us-central1.run.app/api/search";
-    const payload = { query: queryText, stream: streamMode };
+    // Always use non-streaming mode to enable analytics tracking
+    const payload = { query: queryText, stream: false };
     
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: streamMode ? "text/event-stream" : "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify(payload),
     });
 
-    console.log("response", response, "streaming:", streamMode);
+    console.log("response", response);
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -54,20 +54,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // If streaming is supported by backend, pipe the stream through
-    if (streamMode && response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
-      return new Response(response.body, {
-        status: 200,
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache, no-transform",
-          "Connection": "keep-alive",
-          "X-Accel-Buffering": "no", // Disable nginx buffering
-        },
-      });
-    }
-
-    // Fallback to non-streaming response
+    // Always consume the response as JSON to track analytics properly
+    // Even if streaming was requested, we'll return JSON to enable tracking
     const json = await response.json().catch(() => null);
     if (!json) {
       // Track error

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { trackChatInteraction } from "@/lib/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -138,21 +139,12 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function to track analytics asynchronously without blocking the response
-async function trackAnalyticsAsync(data: any) {
-  try {
-    // Use fetch to call the tracking endpoint
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                    'http://localhost:3000';
-    
-    fetch(`${baseUrl}/api/analytics/track`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    }).catch(err => console.error('Analytics tracking failed:', err));
-  } catch (error) {
-    console.error('Failed to initiate analytics tracking:', error);
-  }
+function trackAnalyticsAsync(data: any) {
+  // Call trackChatInteraction directly instead of making an HTTP request
+  // This ensures reliable tracking in serverless environments like Vercel
+  trackChatInteraction(data).catch(err => 
+    console.error('Analytics tracking failed:', err)
+  );
 }
 
 

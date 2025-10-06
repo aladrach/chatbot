@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       
-      // Track error
-      trackAnalyticsAsync({
+      // Track error (await to ensure it completes in serverless)
+      await trackAnalyticsAsync({
         sessionId,
         question: queryText,
         timestamp: new Date(),
@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
     // Even if streaming was requested, we'll return JSON to enable tracking
     const json = await response.json().catch(() => null);
     if (!json) {
-      // Track error
-      trackAnalyticsAsync({
+      // Track error (await to ensure it completes in serverless)
+      await trackAnalyticsAsync({
         sessionId,
         question: queryText,
         timestamp: new Date(),
@@ -104,8 +104,8 @@ export async function POST(request: NextRequest) {
     const isUnanswered = Array.isArray(answerSkippedReasons) && answerSkippedReasons.length > 0;
     const skipReason = isUnanswered ? answerSkippedReasons[0] : undefined;
     
-    // Track interaction
-    trackAnalyticsAsync({
+    // Track interaction (await to ensure it completes in serverless)
+    await trackAnalyticsAsync({
       sessionId,
       question: queryText,
       answer: answerText,
@@ -138,13 +138,16 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper function to track analytics asynchronously without blocking the response
-function trackAnalyticsAsync(data: any) {
-  // Call trackChatInteraction directly instead of making an HTTP request
-  // This ensures reliable tracking in serverless environments like Vercel
-  trackChatInteraction(data).catch(err => 
-    console.error('Analytics tracking failed:', err)
-  );
+// Helper function to track analytics
+// In serverless environments, we await this to ensure tracking completes before function terminates
+async function trackAnalyticsAsync(data: any) {
+  try {
+    // Call trackChatInteraction directly instead of making an HTTP request
+    // This ensures reliable tracking in serverless environments like Vercel
+    await trackChatInteraction(data);
+  } catch (err) {
+    console.error('Analytics tracking failed:', err);
+  }
 }
 
 
